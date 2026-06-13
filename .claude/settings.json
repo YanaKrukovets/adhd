@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node scripts/hooks/block-dangerous.js" }]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "node scripts/hooks/protect-files.js" },
+          { "type": "command", "command": "node scripts/hooks/prompt-change-guard.js" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "bash scripts/hooks/post-edit-check.sh" }]
+      }
+    ]
+  }
+}

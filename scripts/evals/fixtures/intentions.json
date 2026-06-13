@@ -1,0 +1,32 @@
+[
+  {
+    "id": "p001",
+    "input": "I need to file my taxes",
+    "context": { "timezone": "America/Toronto", "energy_preference": "medium", "recent_throughput": 2 },
+    "notes": "Classic ADHD avoidance task — clear enough to plan without clarifying question"
+  },
+  {
+    "id": "p002",
+    "input": "deal with my car situation",
+    "context": { "timezone": "America/New_York", "energy_preference": "low", "recent_throughput": 1 },
+    "notes": "Genuinely ambiguous — repair vs registration vs insurance. Should trigger clarifying question"
+  },
+  {
+    "id": "p003",
+    "input": "I want to apply for that job at the design studio I saw on Instagram",
+    "context": { "timezone": "Europe/London", "energy_preference": "high", "recent_throughput": 3 },
+    "notes": "Specific enough to plan. First action should be finding/bookmarking the actual posting"
+  },
+  {
+    "id": "p004",
+    "input": "clean my apartment before my parents visit on Saturday",
+    "context": { "timezone": "America/Chicago", "energy_preference": "medium", "recent_throughput": 2 },
+    "notes": "Time-sensitive, multi-room. Good test for dependency ordering and energy tagging"
+  },
+  {
+    "id": "p005",
+    "input": "I need to set up my new laptop",
+    "context": { "timezone": "America/Los_Angeles", "energy_preference": "medium", "recent_throughput": 2 },
+    "notes": "Technical, multiple prerequisites. Tests dependency ordering and concrete first actions"
+  }
+]
