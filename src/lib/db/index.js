@@ -24,4 +24,9 @@ export const db = new Proxy(/** @type {any} */ ({}), {
   get(_target, prop) {
     return getDb()[prop];
   },
+  // Auth.js's DrizzleAdapter uses `instanceof`/prototype-chain checks to detect
+  // the dialect, which bypass the `get` trap — forward those too.
+  getPrototypeOf() {
+    return Reflect.getPrototypeOf(getDb());
+  },
 });

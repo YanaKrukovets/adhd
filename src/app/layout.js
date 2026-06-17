@@ -4,8 +4,10 @@ import './globals.css';
 import { validateEnv } from '@/lib/schemas/api.js';
 
 // Fail loudly at server startup if required env vars are missing.
-// Only runs on the server (layout is a Server Component).
-if (typeof window === 'undefined') {
+// Only runs on the server (layout is a Server Component). Skipped during
+// `next build` page-data collection — build-time static generation must not
+// require runtime secrets, which may be absent in the build environment.
+if (typeof window === 'undefined' && process.env.NEXT_PHASE !== 'phase-production-build') {
   try {
     validateEnv();
   } catch (err) {
