@@ -1,6 +1,9 @@
 // @ts-check
 import { NextResponse } from 'next/server';
 import postgres from 'postgres';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/index.js';
+import { sessions, users } from '@/lib/db/schema.js';
 
 // TEMPORARY diagnostic route. Guarded by CRON_SECRET. Remove after debugging.
 // GET /api/debug/db?secret=<CRON_SECRET>
@@ -33,21 +36,32 @@ export async function GET(/** @type {Request} */ req) {
   /** @type {Record<string, unknown>} */
   const result = { host, hasUrl: Boolean(dbUrl) };
 
+  const token = url.searchParams.get('token') || '00000000-0000-0000-0000-000000000000';
+
+  // A) Fresh raw client, PARAMETERIZED where (extended protocol).
   const sql = postgres(dbUrl, { prepare: false, connect_timeout: 10 });
   try {
-    const ping = await sql`select 1 as ok`;
-    result.ping = ping[0];
-    const join = await sql`
-      select "sessions"."session_token", "users"."id"
-      from "sessions" inner join "users" on "users"."id" = "sessions"."user_id"
-      limit 1`;
-    result.joinRows = join.length;
-    result.ok = true;
+    const r = await sql`
+      select "sessions"."session_token" from "sessions"
+      inner join "users" on "users"."id" = "sessions"."user_id"
+      where "sessions"."session_token" = ${token} limit 1`;
+    result.A_rawParam = { ok: true, rows: r.length };
   } catch (e) {
-    result.ok = false;
-    result.error = describe(e);
+    result.A_rawParam = { ok: false, error: describe(e) };
   } finally {
     await sql.end({ timeout: 2 });
+  }
+
+  // B) The ACTUAL auth path: shared Drizzle `db` client + parameterized where.
+  try {
+    const r = await db
+      .select()
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(eq(sessions.sessionToken, token));
+    result.B_drizzleShared = { ok: true, rows: r.length };
+  } catch (e) {
+    result.B_drizzleShared = { ok: false, error: describe(e) };
   }
 
   return NextResponse.json(result);
