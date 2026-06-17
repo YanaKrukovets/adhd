@@ -93,19 +93,19 @@ describe('TaskSchema', () => {
     })).toThrow();
   });
 
-  it('rejects first_action longer than 120 chars', () => {
+  it('rejects first_action longer than 280 chars', () => {
     expect(() => TaskSchema.parse({
       title: 'Test',
-      first_action: 'A'.repeat(121),
+      first_action: 'A'.repeat(281),
       estimate_minutes: 10,
       energy: 'low',
     })).toThrow();
   });
 
-  it('accepts first_action at exactly 120 chars', () => {
+  it('accepts first_action at exactly 280 chars', () => {
     expect(() => TaskSchema.parse({
       title: 'Test',
-      first_action: 'A'.repeat(120),
+      first_action: 'A'.repeat(280),
       estimate_minutes: 10,
       energy: 'low',
     })).not.toThrow();
