@@ -68,8 +68,8 @@ export async function runPlanner({ intention, clarifyingAnswer, context, userId 
       prompt: intention,
     }),
     extractUsage: (r) => ({
-      tokensIn: r.usage.promptTokens,
-      tokensOut: r.usage.completionTokens,
+      tokensIn: r.usage.inputTokens,
+      tokensOut: r.usage.outputTokens,
     }),
   });
 

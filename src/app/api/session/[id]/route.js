@@ -1,10 +1,23 @@
 // @ts-check
 import { NextResponse } from 'next/server';
-import { convertToCoreMessages } from 'ai';
+import { convertToModelMessages } from 'ai';
 import { auth } from '@/lib/auth.js';
 import { getWorkSession, getTaskById, appendSessionEvent } from '@/lib/db/queries.js';
 import { runSessionAgent } from '@/lib/agents/session.js';
 import { randomUUID } from 'crypto';
+
+/**
+ * Extracts the concatenated text content from a UIMessage's parts.
+ *
+ * @param {{ parts?: Array<{ type: string, text?: string }> }} [message]
+ * @returns {string}
+ */
+function getMessageText(message) {
+  return (message?.parts ?? [])
+    .filter((p) => p.type === 'text')
+    .map((p) => p.text)
+    .join('');
+}
 
 /**
  * POST /api/session/[id]
@@ -39,26 +52,27 @@ export async function POST(request, { params }) {
 
   const uiMessages = body.messages ?? [];
   const lastUserMessage = [...uiMessages].reverse().find((m) => m.role === 'user');
+  const lastUserText = getMessageText(lastUserMessage);
 
   // Silently drop automated check-ins while flow mode is active
-  const isCheckin = lastUserMessage?.content?.startsWith('[session:checkin]') ||
+  const isCheckin = lastUserText.startsWith('[session:checkin]') ||
     body.type === 'system-checkin';
   if (isCheckin && workSession.flowModeUntil && new Date() < workSession.flowModeUntil) {
     return new Response(null, { status: 204 });
   }
 
-  if (lastUserMessage && !lastUserMessage.content?.startsWith('[session:')) {
+  if (lastUserMessage && !lastUserText.startsWith('[session:')) {
     appendSessionEvent({
       id: randomUUID(),
       sessionId,
       eventType: 'user_message',
       role: 'user',
-      content: lastUserMessage.content,
+      content: lastUserText,
     }).catch((err) => console.error('[session] persist user message:', err));
   }
 
   const task = workSession.taskId ? await getTaskById(workSession.taskId) : null;
-  const messages = convertToCoreMessages(uiMessages);
+  const messages = convertToModelMessages(uiMessages);
 
   const result = runSessionAgent({
     sessionId,

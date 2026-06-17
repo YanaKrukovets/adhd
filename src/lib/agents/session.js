@@ -1,5 +1,5 @@
 // @ts-check
-import { streamText, tool } from 'ai';
+import { streamText, tool, stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { randomUUID } from 'crypto';
 import { loadPrompt } from '../prompts/load.js';
@@ -32,7 +32,7 @@ export const SESSION_PROMPT_VERSION = '1.1.0';
  * @param {string} params.taskTitle
  * @param {string} params.firstAction
  * @param {Date} params.startedAt
- * @param {Array<import('ai').CoreMessage>} params.messages
+ * @param {Array<import('ai').ModelMessage>} params.messages
  * @returns {ReturnType<typeof streamText>}
  */
 export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, startedAt, messages }) {
@@ -48,11 +48,11 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
     model: anthropic(SESSION_MODEL),
     system: systemPrompt,
     messages,
-    maxSteps: 5,
+    stopWhen: stepCountIs(5),
     tools: {
       update_task_state: tool({
         description: 'Update the state of the current task.',
-        parameters: UpdateTaskStateInputSchema,
+        inputSchema: UpdateTaskStateInputSchema,
         execute: async ({ taskId, state }) => {
           /** @type {Partial<import('../db/schema.js').tasks.$inferInsert>} */
           const updates = {};
@@ -76,7 +76,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
 
       split_task: tool({
         description: 'Break an overwhelming task into 2–5 smaller concrete steps.',
-        parameters: SplitTaskInputSchema,
+        inputSchema: SplitTaskInputSchema,
         execute: async ({ taskId, steps }) => {
           await updateTask(taskId, userId, { state: 'deferred', isToday: false });
           const created = await Promise.all(
@@ -106,7 +106,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
 
       set_checkin_timer: tool({
         description: 'Schedule a gentle check-in after N minutes while the user works.',
-        parameters: SetCheckinTimerInputSchema,
+        inputSchema: SetCheckinTimerInputSchema,
         execute: async ({ minutes, reason }) => {
           // Client reads this tool result and sets a browser timer to send a check-in message
           return { ok: true, minutes, reason };
@@ -115,7 +115,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
 
       log_blocker: tool({
         description: 'Log a blocker without derailing the session flow.',
-        parameters: LogBlockerInputSchema,
+        inputSchema: LogBlockerInputSchema,
         execute: async ({ taskId, note }) => {
           await appendSessionEvent({
             id: randomUUID(),
@@ -133,7 +133,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
 
       end_session: tool({
         description: 'End the session with a factual summary and a concrete tomorrow first action.',
-        parameters: EndSessionInputSchema,
+        inputSchema: EndSessionInputSchema,
         execute: async ({ summary, tomorrow_first_action }) => {
           await updateWorkSession(sessionId, userId, {
             state: 'ended',
@@ -148,7 +148,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
       enter_flow_mode: tool({
         description:
           'User wants to work without interruption. Silences check-ins for the given number of minutes.',
-        parameters: EnterFlowModeInputSchema,
+        inputSchema: EnterFlowModeInputSchema,
         execute: async ({ minutes }) => {
           const flowModeUntil = new Date(Date.now() + minutes * 60 * 1000);
           await updateWorkSession(sessionId, userId, { flowModeUntil });
@@ -177,8 +177,8 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
 
     onFinish: async ({ text, usage }) => {
       const latencyMs = Date.now() - callStart;
-      const tokensIn = usage?.promptTokens ?? 0;
-      const tokensOut = usage?.completionTokens ?? 0;
+      const tokensIn = usage?.inputTokens ?? 0;
+      const tokensOut = usage?.outputTokens ?? 0;
 
       logAgentCall({
         id: randomUUID(),
