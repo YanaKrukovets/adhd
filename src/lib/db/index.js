@@ -15,7 +15,11 @@ function getDb() {
     }
     // `prepare: false` is required for Supabase's transaction-mode pooler
     // (Supavisor, port 6543), which does not support prepared statements.
-    const queryClient = postgres(process.env.DATABASE_URL, { prepare: false });
+    // `max: 1` keeps each serverless instance to a single pooled connection.
+    const queryClient = postgres(process.env.DATABASE_URL, {
+      prepare: false,
+      max: 1,
+    });
     _db = drizzle(queryClient, { schema });
   }
   return _db;
