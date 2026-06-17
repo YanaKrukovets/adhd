@@ -13,12 +13,18 @@ function getDb() {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is required');
     }
-    // `prepare: false` is required for Supabase's transaction-mode pooler
-    // (Supavisor, port 6543), which does not support prepared statements.
-    // `max: 1` keeps each serverless instance to a single pooled connection.
+    // Config tuned for Supabase's transaction-mode pooler (Supavisor, 6543)
+    // running behind serverless functions:
+    // - `prepare: false`: the pooler doesn't support prepared statements.
+    // - `max: 1`: one connection per warm serverless instance.
+    // - `idle_timeout`: proactively close idle connections client-side so a
+    //   warm instance never reuses one the pooler has already closed (the
+    //   cause of intermittent "Failed query" / empty-error reads).
     const queryClient = postgres(process.env.DATABASE_URL, {
       prepare: false,
       max: 1,
+      idle_timeout: 20,
+      connect_timeout: 10,
     });
     _db = drizzle(queryClient, { schema });
   }
