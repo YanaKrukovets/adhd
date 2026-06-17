@@ -28,10 +28,10 @@ export default async function EvalsPage() {
           <table className="mt-3 w-full text-sm">
             <thead>
               <tr className="text-left text-stone-500 border-b border-stone-200">
-                <th className="pb-2 pr-4">Model</th>
-                <th className="pb-2 pr-4">Calls</th>
-                <th className="pb-2 pr-4">Total cost</th>
-                <th className="pb-2">Avg latency</th>
+                <th scope="col" className="pb-2 pr-4">Model</th>
+                <th scope="col" className="pb-2 pr-4">Calls</th>
+                <th scope="col" className="pb-2 pr-4">Total cost</th>
+                <th scope="col" className="pb-2">Avg latency</th>
               </tr>
             </thead>
             <tbody>

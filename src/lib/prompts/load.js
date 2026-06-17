@@ -19,6 +19,12 @@ export function loadPrompt(name, vars = {}) {
   // Strip version comment header
   content = content.replace(/^<!--.*?-->\n/, '');
 
+  // Process {% if var %}...{% endif %} blocks — include only when var is non-empty
+  content = content.replace(
+    /\{%\s*if\s+(\w+)\s*%\}([\s\S]*?)\{%\s*endif\s*%\}/g,
+    (_, varName, inner) => ((vars[varName] ?? '').trim() ? inner : '')
+  );
+
   // Interpolate {{variable}} placeholders
   for (const [key, value] of Object.entries(vars)) {
     content = content.replaceAll(`{{${key}}}`, value);

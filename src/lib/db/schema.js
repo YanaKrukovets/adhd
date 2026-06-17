@@ -77,6 +77,8 @@ export const workSessions = pgTable('work_sessions', {
   taskId: text('task_id').references(() => tasks.id),
   promptVersion: text('prompt_version').notNull(),
   state: text('state').notNull().default('active'), // active | ended
+  // When set, system check-ins are silenced until this timestamp (flow state)
+  flowModeUntil: timestamp('flow_mode_until', { mode: 'date' }),
   summary: text('summary'),
   tomorrowFirstAction: text('tomorrow_first_action'),
   startedAt: timestamp('started_at', { mode: 'date' }).defaultNow().notNull(),
@@ -92,6 +94,8 @@ export const sessionEvents = pgTable('session_events', {
   toolName: text('tool_name'),
   toolInput: jsonb('tool_input'),
   toolResult: jsonb('tool_result'),
+  // Arbitrary per-event metadata. For checkin events: { sent_at, response_delay_seconds, abandoned }
+  metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
 });
 

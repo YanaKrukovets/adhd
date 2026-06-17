@@ -4,9 +4,12 @@ import { z } from 'zod';
 export const TaskStateSchema = z.enum(['pending', 'today', 'in_progress', 'done', 'deferred']);
 // NOTE: 'overdue' is intentionally absent — tasks roll forward silently
 
+// Session tool uses friendlier verbs that map to DB states in the agent execute fn
+export const SessionTaskStateSchema = z.enum(['started', 'done', 'stuck', 'deferred']);
+
 export const UpdateTaskStateInputSchema = z.object({
   taskId: z.string().min(1),
-  state: TaskStateSchema,
+  state: SessionTaskStateSchema,
 });
 
 export const SplitTaskInputSchema = z.object({
@@ -32,6 +35,10 @@ export const LogBlockerInputSchema = z.object({
 export const EndSessionInputSchema = z.object({
   summary: z.string().min(1).max(1000),
   tomorrow_first_action: z.string().min(1).max(120),
+});
+
+export const EnterFlowModeInputSchema = z.object({
+  minutes: z.number().int().min(10).max(180),
 });
 
 export const UserMessageSchema = z.object({

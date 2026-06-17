@@ -50,6 +50,15 @@ export async function updateIntentionPlan(intentionId, userId, planJson) {
 // ---- Tasks ----
 
 /**
+ * @param {string} taskId
+ * @returns {Promise<typeof tasks.$inferSelect | undefined>}
+ */
+export async function getTaskById(taskId) {
+  const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  return task;
+}
+
+/**
  * @param {string} userId
  * @returns {Promise<Array<typeof tasks.$inferSelect>>}
  */
@@ -198,6 +207,37 @@ export async function getSessionEvents(sessionId) {
 export async function logAgentCall(call) {
   const [created] = await db.insert(agentCalls).values(call).returning();
   return created;
+}
+
+/**
+ * Morning replan: clear today flags for all open tasks, then mark up to 3 as today.
+ * Selects smallest tasks first so the user gets quick wins.
+ * @param {string} userId
+ * @returns {Promise<Array<typeof tasks.$inferSelect>>} newly selected today tasks
+ */
+export async function replanToday(userId) {
+  // Clear today from everything not done/in_progress
+  await db.update(tasks)
+    .set({ isToday: false, state: 'pending' })
+    .where(and(
+      eq(tasks.userId, userId),
+      sql`${tasks.state} IN ('today', 'pending', 'deferred')`
+    ));
+
+  // Pick up to 3 tasks ordered by estimate asc (quick wins first), then creation order
+  const candidates = await db.select().from(tasks)
+    .where(and(eq(tasks.userId, userId), eq(tasks.state, 'pending')))
+    .orderBy(tasks.estimateMinutes, tasks.createdAt)
+    .limit(3);
+
+  if (candidates.length === 0) return [];
+
+  const ids = candidates.map((t) => t.id);
+  await db.update(tasks)
+    .set({ isToday: true, state: 'today' })
+    .where(and(eq(tasks.userId, userId), sql`${tasks.id} = ANY(${ids})`));
+
+  return candidates;
 }
 
 /**

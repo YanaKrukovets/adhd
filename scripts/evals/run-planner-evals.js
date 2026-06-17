@@ -12,14 +12,18 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
+import { callPlanner } from '../../src/lib/agents/planner.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const JUDGE_MODEL = 'claude-haiku-4-5-20251001';
 
-const FIXTURES_PATH = join(process.cwd(), 'scripts/evals/fixtures/intentions.json');
-const RESULTS_DIR = join(process.cwd(), 'scripts/evals/results');
+const FIXTURES_PATH = join(__dirname, 'fixtures/intentions.json');
+const RESULTS_DIR = join(__dirname, 'results');
 
 /** @type {string[]} */
 const RUBRIC_DIMENSIONS = [
@@ -124,29 +128,21 @@ async function runPlannerEvals() {
   const fixtures = JSON.parse(readFileSync(FIXTURES_PATH, 'utf-8'));
   console.log(`Running ${fixtures.length} fixtures against judge model: ${JUDGE_MODEL}\n`);
 
-  // NOTE: In Phase 0 we stub the planner call (API route doesn't exist yet).
-  // In Phase 1, replace this with a real call to /api/plan.
-  const stubPlannerOutput = (fixture) => JSON.stringify({
-    clarifying_question: fixture.id === 'p002' ? 'Is this a repair/service issue, or paperwork like registration?' : null,
-    tasks: fixture.id === 'p002' ? [] : [
-      {
-        title: 'Example task from stub planner',
-        first_action: 'Open https://example.com in Chrome',
-        estimate_minutes: 5,
-        energy: 'low',
-        blockers: [],
-      },
-    ],
-    suggested_today: fixture.id === 'p002' ? [] : [0],
-  });
-
   /** @type {Array<{id: string, scores: Record<string, number>}>} */
   const results = [];
 
   for (const fixture of fixtures) {
     process.stdout.write(`  Fixture ${fixture.id}: "${fixture.input.slice(0, 50)}"... `);
     try {
-      const plannerOutput = stubPlannerOutput(fixture);
+      const plan = await callPlanner({
+        intention: fixture.input,
+        context: {
+          timezone: fixture.context?.timezone,
+          energy_level: fixture.context?.energy_preference,
+          recent_throughput: fixture.context?.recent_throughput,
+        },
+      });
+      const plannerOutput = JSON.stringify(plan);
       const scores = await judgeOutput(fixture, plannerOutput);
       results.push({ id: fixture.id, scores });
       const avg = Object.values(scores).reduce((a, b) => a + b, 0) / RUBRIC_DIMENSIONS.length;

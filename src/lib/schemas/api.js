@@ -14,6 +14,10 @@ export const ReplanRequestSchema = z.object({
   userId: z.string().min(1),
 });
 
+export const StartSessionSchema = z.object({
+  taskId: z.string().min(1),
+});
+
 export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),

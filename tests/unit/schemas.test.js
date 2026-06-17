@@ -142,9 +142,14 @@ describe('UpdateTaskStateInputSchema', () => {
     expect(() => UpdateTaskStateInputSchema.parse({ taskId: 'abc', state: 'overdue' })).toThrow();
   });
 
-  it('accepts valid update', () => {
-    const result = UpdateTaskStateInputSchema.parse({ taskId: 'task-1', state: 'in_progress' });
-    expect(result.state).toBe('in_progress');
+  it('accepts started state', () => {
+    const result = UpdateTaskStateInputSchema.parse({ taskId: 'task-1', state: 'started' });
+    expect(result.state).toBe('started');
+  });
+
+  it('accepts done state', () => {
+    const result = UpdateTaskStateInputSchema.parse({ taskId: 'task-1', state: 'done' });
+    expect(result.state).toBe('done');
   });
 });
 

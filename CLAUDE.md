@@ -22,6 +22,14 @@ Agentic executive-function assistant for adults with ADHD. JavaScript (NOT TypeS
 9. Session agent = Sonnet. Planner + eval judges = Haiku. Don't change model routing without updating cost projections in README.
 10. Copy/tone: never use shame language ("overdue", "you failed to", "missed", streak-breaking). Voice is a calm friend, not a coach.
 
+## Feature gate
+Before implementing any new feature, answer: **Does this increase the probability a user starts a task within the next 5 minutes?**
+If no, it doesn't ship. Projects, tags, kanban boards, recurring tasks, priorities, and nested subtasks all fail this test. The product is initiation, not task management.
+
+## Telemetry notes
+- `agentCalls.agentType` (`planner | session | eval_judge`) is already a cost bucket — do NOT add a redundant `cost_bucket` column. Derive per-session/per-task cost metrics as joins in queries, not as schema.
+- Check-in telemetry lives in `sessionEvents.metadata` (jsonb). For `eventType: 'checkin'` rows, store `{ sent_at, response_delay_seconds, abandoned }`. This is the data needed to tune interruption cadence per user.
+
 ## Conventions
 - Commit format: `feat|fix|chore|test|eval(scope): description`
 - Server components by default; `'use client'` only where interaction demands it.
