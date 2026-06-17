@@ -36,7 +36,7 @@ export default async function SignInPage({ searchParams }) {
           </button>
         </form>
 
-        <p className="mt-12 text-sm text-stone-400">
+        <p className="mt-12 text-sm text-stone-500">
           No timers. No streaks. No judgment.
         </p>
       </div>

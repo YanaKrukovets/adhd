@@ -22,14 +22,14 @@ export default async function HistoryPage() {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-12">
-      <Link href="/app" className="text-xs text-stone-400 hover:text-stone-600 transition-colors">
+      <Link href="/app" className="text-xs text-stone-500 hover:text-stone-800 transition-colors">
         ← Today
       </Link>
       <h1 className="mt-4 text-2xl font-semibold text-stone-900">Things you got done</h1>
       <p className="mt-2 text-stone-500 text-sm">A record of what you finished. Nothing else.</p>
 
       {tasks.length === 0 ? (
-        <div className="mt-8 text-stone-400 text-sm">Nothing here yet — go finish something!</div>
+        <div className="mt-8 text-stone-500 text-sm">Nothing here yet — go finish something!</div>
       ) : (
         <ul className="mt-8 flex flex-col gap-2">
           {tasks.map((task) => (
@@ -41,7 +41,7 @@ export default async function HistoryPage() {
               <div>
                 <p className="text-stone-800 font-medium leading-snug">{task.title}</p>
                 {task.completedAt && (
-                  <p className="mt-0.5 text-xs text-stone-400">
+                  <p className="mt-0.5 text-xs text-stone-600">
                     {new Date(task.completedAt).toLocaleDateString(undefined, {
                       weekday: 'short',
                       month: 'short',

@@ -20,12 +20,12 @@ export default async function SessionPage({ params }) {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-10">
-      <Link href="/app" className="text-xs text-stone-400 hover:text-stone-600 transition-colors">
+      <Link href="/app" className="text-xs text-stone-500 hover:text-stone-800 transition-colors">
         ← Back
       </Link>
 
       <div className="mt-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">Working on</p>
+        <p className="text-xs font-medium text-stone-600 uppercase tracking-wide">Working on</p>
         <h1 className="mt-1 text-lg font-semibold text-stone-900">
           {task?.title ?? 'Open session'}
         </h1>

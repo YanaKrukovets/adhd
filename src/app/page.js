@@ -25,7 +25,7 @@ export default function LandingPage() {
             Sign in
           </Link>
         </div>
-        <p className="mt-12 text-sm text-stone-400">
+        <p className="mt-12 text-sm text-stone-500">
           No timers. No streaks. No judgment.
         </p>
       </div>

@@ -21,7 +21,7 @@ export default function AppError({ error, reset }) {
       >
         Try again
       </button>
-      <p className="mt-4 text-xs text-stone-400">
+      <p className="mt-4 text-xs text-stone-600">
         If this keeps happening,{' '}
         <a href="/app" className="underline">go back to today</a>.
       </p>

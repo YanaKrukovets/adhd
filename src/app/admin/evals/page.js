@@ -23,7 +23,7 @@ export default async function EvalsPage() {
       <section className="mt-8">
         <h2 className="text-lg font-medium text-stone-800">Agent Call Costs</h2>
         {stats.length === 0 ? (
-          <p className="mt-3 text-stone-400 text-sm">No agent calls recorded yet.</p>
+          <p className="mt-3 text-stone-500 text-sm">No agent calls recorded yet.</p>
         ) : (
           <table className="mt-3 w-full text-sm">
             <thead>
@@ -50,7 +50,7 @@ export default async function EvalsPage() {
 
       <section className="mt-10">
         <h2 className="text-lg font-medium text-stone-800">Eval Scores</h2>
-        <p className="mt-2 text-stone-400 text-sm">Run <code>npm run evals:planner</code> or <code>npm run evals:session</code> to generate results.</p>
+        <p className="mt-2 text-stone-500 text-sm">Run <code>npm run evals:planner</code> or <code>npm run evals:session</code> to generate results.</p>
       </section>
     </main>
   );
