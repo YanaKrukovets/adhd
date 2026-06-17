@@ -13,7 +13,9 @@ function getDb() {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is required');
     }
-    const queryClient = postgres(process.env.DATABASE_URL);
+    // `prepare: false` is required for Supabase's transaction-mode pooler
+    // (Supavisor, port 6543), which does not support prepared statements.
+    const queryClient = postgres(process.env.DATABASE_URL, { prepare: false });
     _db = drizzle(queryClient, { schema });
   }
   return _db;
