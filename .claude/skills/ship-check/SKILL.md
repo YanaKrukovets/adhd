@@ -31,7 +31,7 @@ Invoke `/eval-run both`. PASS = all dimensions at or above targets; no golden-se
 
 ### 5. Bundle secret check
 ```
-grep -r "ANTHROPIC_API_KEY\|DATABASE_URL\|AUTH_SECRET" .next/ 2>/dev/null || echo "clean"
+grep -r "GOOGLE_GENERATIVE_AI_API_KEY\|DATABASE_URL\|AUTH_SECRET" .next/ 2>/dev/null || echo "clean"
 ```
 PASS = no secrets in client bundle.
 

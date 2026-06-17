@@ -1,6 +1,6 @@
 // @ts-check
 import { streamText, tool, stepCountIs } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { randomUUID } from 'crypto';
 import { loadPrompt } from '../prompts/load.js';
 import { calculateCost } from '../telemetry.js';
@@ -20,7 +20,7 @@ import {
   logAgentCall,
 } from '../db/queries.js';
 
-export const SESSION_MODEL = 'claude-sonnet-4-6';
+export const SESSION_MODEL = 'gemini-2.5-flash';
 export const SESSION_PROMPT_VERSION = '1.1.0';
 
 /**
@@ -45,7 +45,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
   const callStart = Date.now();
 
   return streamText({
-    model: anthropic(SESSION_MODEL),
+    model: google(SESSION_MODEL),
     system: systemPrompt,
     messages,
     stopWhen: stepCountIs(5),

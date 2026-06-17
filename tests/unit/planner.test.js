@@ -6,8 +6,8 @@ vi.mock('ai', () => ({
   generateObject: vi.fn(),
 }));
 
-vi.mock('@ai-sdk/anthropic', () => ({
-  anthropic: vi.fn(() => 'mock-haiku-model'),
+vi.mock('@ai-sdk/google', () => ({
+  google: vi.fn(() => 'mock-gemini-model'),
 }));
 
 // Prevent telemetry from touching the DB — just run the call and return
@@ -50,14 +50,14 @@ describe('PLANNER_PROMPT_VERSION', () => {
 });
 
 describe('callPlanner', () => {
-  it('calls generateObject with Haiku model and the plan schema', async () => {
+  it('calls generateObject with the Gemini model and the plan schema', async () => {
     vi.mocked(generateObject).mockResolvedValueOnce({ object: validPlan, usage: { promptTokens: 100, completionTokens: 50 } });
 
     const result = await callPlanner({ intention: 'I need to file my taxes' });
 
     expect(generateObject).toHaveBeenCalledOnce();
     const call = vi.mocked(generateObject).mock.calls[0][0];
-    expect(call.model).toBe('mock-haiku-model');
+    expect(call.model).toBe('mock-gemini-model');
     expect(call.prompt).toBe('I need to file my taxes');
     expect(typeof call.system).toBe('string');
     expect(call.system.length).toBeGreaterThan(50);

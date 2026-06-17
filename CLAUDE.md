@@ -7,7 +7,7 @@ Agentic executive-function assistant for adults with ADHD. JavaScript (NOT TypeS
 - `npm run lint` / `npm run format` — ESLint flat config / Prettier
 - `npm test` — Vitest unit tests
 - `npm run test:e2e` — Playwright
-- `npm run evals:planner` / `npm run evals:session` — eval harnesses (require ANTHROPIC_API_KEY)
+- `npm run evals:planner` / `npm run evals:session` — eval harnesses (require GOOGLE_GENERATIVE_AI_API_KEY)
 - `npm run db:generate` / `npm run db:migrate` — Drizzle
 
 ## Hard rules
@@ -19,7 +19,7 @@ Agentic executive-function assistant for adults with ADHD. JavaScript (NOT TypeS
 6. No countdown timers in UI. Elapsed-time indicators only.
 7. Prompts live in `src/lib/prompts/*.md` and are loaded at runtime. NEVER inline a system prompt in code. Every prompt edit requires: bump version constant, add CHANGELOG.md entry, run the matching eval suite, paste before/after scores in the changelog entry.
 8. Every LLM call goes through `src/lib/telemetry.js` wrapper (logs model, tokens, cost, latency, prompt_version to agent_calls).
-9. Session agent = Sonnet. Planner + eval judges = Haiku. Don't change model routing without updating cost projections in README.
+9. All agents (session, planner, eval judges) run on Google Gemini (`gemini-2.5-flash`) via the free tier. Don't change model routing without updating cost projections in README. Switch the provider in one place per agent (`@ai-sdk/google`).
 10. Copy/tone: never use shame language ("overdue", "you failed to", "missed", streak-breaking). Voice is a calm friend, not a coach.
 
 ## Feature gate

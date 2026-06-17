@@ -5,22 +5,22 @@
 /**
  * Planner eval harness.
  * Runs each intention fixture through the planner agent,
- * then uses Haiku as an LLM judge to score each rubric dimension.
+ * then uses Gemini as an LLM judge to score each rubric dimension.
  *
  * Usage: node scripts/evals/run-planner-evals.js
- * Requires: ANTHROPIC_API_KEY in env
+ * Requires: GOOGLE_GENERATIVE_AI_API_KEY in env
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import Anthropic from '@anthropic-ai/sdk';
+import { generateText } from 'ai';
+import { google } from '@ai-sdk/google';
 import { callPlanner } from '../../src/lib/agents/planner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const JUDGE_MODEL = 'claude-haiku-4-5-20251001';
+const JUDGE_MODEL = 'gemini-2.5-flash';
 
 const FIXTURES_PATH = join(__dirname, 'fixtures/intentions.json');
 const RESULTS_DIR = join(__dirname, 'results');
@@ -96,13 +96,12 @@ Respond with ONLY valid JSON in this format:
   "clarifying_question_discipline": { "quote": "...", "reasoning": "...", "score": 0|1|2 }
 }`;
 
-  const response = await client.messages.create({
-    model: JUDGE_MODEL,
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: judgePrompt }],
+  const { text } = await generateText({
+    model: google(JUDGE_MODEL),
+    maxOutputTokens: 1024,
+    prompt: judgePrompt,
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
   try {
     const parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
     /** @type {Record<string, number>} */
@@ -120,8 +119,8 @@ Respond with ONLY valid JSON in this format:
 async function runPlannerEvals() {
   console.log('\n=== Focus Copilot — Planner Eval Suite ===\n');
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ERROR: ANTHROPIC_API_KEY is required');
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    console.error('ERROR: GOOGLE_GENERATIVE_AI_API_KEY is required');
     process.exit(1);
   }
 

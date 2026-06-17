@@ -4,13 +4,14 @@ import { logAgentCall } from './db/queries.js';
 
 /**
  * Cost per million tokens (USD), by model.
- * Update when Anthropic changes pricing.
+ * Gemini models are on the free tier — $0 within the free quota.
+ * Update when Google changes pricing or you move to a paid tier.
  * @type {Record<string, {input: number, output: number}>}
  */
 const MODEL_COSTS = {
-  'claude-haiku-4-5-20251001':  { input: 0.80,  output: 4.00  },
-  'claude-sonnet-4-6':          { input: 3.00,  output: 15.00 },
-  'claude-opus-4-8':            { input: 15.00, output: 75.00 },
+  'gemini-2.5-flash':      { input: 0, output: 0 },
+  'gemini-2.5-flash-lite': { input: 0, output: 0 },
+  'gemini-2.0-flash':      { input: 0, output: 0 },
 };
 
 /**
@@ -20,7 +21,7 @@ const MODEL_COSTS = {
  * @returns {number} cost in USD
  */
 export function calculateCost(model, tokensIn, tokensOut) {
-  const rates = MODEL_COSTS[model] ?? { input: 3.00, output: 15.00 };
+  const rates = MODEL_COSTS[model] ?? { input: 0, output: 0 };
   return (tokensIn / 1_000_000) * rates.input + (tokensOut / 1_000_000) * rates.output;
 }
 

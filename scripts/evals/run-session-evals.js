@@ -5,18 +5,18 @@
 /**
  * Session agent eval harness.
  * Replays scripted multi-turn scenarios against the session agent
- * and uses Haiku as a judge to score behavior.
+ * and uses Gemini as a judge to score behavior.
  *
  * Usage: node scripts/evals/run-session-evals.js
- * Requires: ANTHROPIC_API_KEY in env
+ * Requires: GOOGLE_GENERATIVE_AI_API_KEY in env
  */
 
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import Anthropic from '@anthropic-ai/sdk';
+import { generateText } from 'ai';
+import { google } from '@ai-sdk/google';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const JUDGE_MODEL = 'claude-haiku-4-5-20251001';
+const JUDGE_MODEL = 'gemini-2.5-flash';
 const RESULTS_DIR = join(process.cwd(), 'scripts/evals/results');
 
 const RUBRIC_DIMENSIONS = [
@@ -114,13 +114,12 @@ Respond with ONLY valid JSON:
   "correct_tool_selection": { "quote": "...", "reasoning": "...", "score": 0|1|2 }
 }`;
 
-  const response = await client.messages.create({
-    model: JUDGE_MODEL,
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: judgePrompt }],
+  const { text } = await generateText({
+    model: google(JUDGE_MODEL),
+    maxOutputTokens: 1024,
+    prompt: judgePrompt,
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
   try {
     const parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
     return Object.fromEntries(RUBRIC_DIMENSIONS.map(d => [d, parsed[d]?.score ?? 0]));
@@ -132,8 +131,8 @@ Respond with ONLY valid JSON:
 async function runSessionEvals() {
   console.log('\n=== Focus Copilot — Session Eval Suite ===\n');
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ERROR: ANTHROPIC_API_KEY is required');
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    console.error('ERROR: GOOGLE_GENERATIVE_AI_API_KEY is required');
     process.exit(1);
   }
 

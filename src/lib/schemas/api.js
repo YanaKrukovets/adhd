@@ -20,7 +20,7 @@ export const StartSessionSchema = z.object({
 
 export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(1),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),
   AUTH_SECRET: z.string().min(32),
   CRON_SECRET: z.string().min(16),
 });
@@ -32,7 +32,7 @@ export const EnvSchema = z.object({
 export function validateEnv() {
   return EnvSchema.parse({
     DATABASE_URL: process.env.DATABASE_URL,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
     AUTH_SECRET: process.env.AUTH_SECRET,
     CRON_SECRET: process.env.CRON_SECRET,
   });

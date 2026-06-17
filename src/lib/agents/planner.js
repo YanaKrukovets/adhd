@@ -1,11 +1,11 @@
 // @ts-check
 import { generateObject } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { PlanSchema } from '../schemas/plan.js';
 import { loadPrompt } from '../prompts/load.js';
 import { withTelemetry } from '../telemetry.js';
 
-const PLANNER_MODEL = 'claude-haiku-4-5-20251001';
+const PLANNER_MODEL = 'gemini-2.5-flash';
 export const PLANNER_PROMPT_VERSION = '1.1.0';
 
 /**
@@ -28,7 +28,7 @@ export async function callPlanner({ intention, clarifyingAnswer, context }) {
   });
 
   const result = await generateObject({
-    model: anthropic(PLANNER_MODEL),
+    model: google(PLANNER_MODEL),
     schema: PlanSchema,
     system: systemPrompt,
     prompt: intention,
@@ -62,7 +62,7 @@ export async function runPlanner({ intention, clarifyingAnswer, context, userId 
     promptVersion: PLANNER_PROMPT_VERSION,
     userId,
     call: () => generateObject({
-      model: anthropic(PLANNER_MODEL),
+      model: google(PLANNER_MODEL),
       schema: PlanSchema,
       system: systemPrompt,
       prompt: intention,
