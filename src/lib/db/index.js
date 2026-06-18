@@ -25,6 +25,13 @@ function getDb() {
       max: 1,
       idle_timeout: 20,
       connect_timeout: 10,
+      // Recycle each connection after 5 min so a warm serverless instance never
+      // reuses one the pooler killed long ago (a dead socket makes the next
+      // query hang with no client-side timeout — a cause of 25s function
+      // stalls). `statement_timeout` is a server-side backstop: any query that
+      // runs longer than 10s is aborted instead of holding the request open.
+      max_lifetime: 60 * 5,
+      connection: { statement_timeout: 10_000 },
     });
     _db = drizzle(queryClient, { schema });
   }
