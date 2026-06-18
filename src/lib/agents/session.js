@@ -49,6 +49,13 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
     system: systemPrompt,
     messages,
     stopWhen: stepCountIs(5),
+    // Gemini's free tier frequently returns 429 (quota) / 503 (overload). The
+    // SDK retries with exponential backoff, which can run past Vercel's 25s
+    // initial-response limit and get the function silently killed. Cap retries
+    // and hard-abort at 20s so the request fails fast and `onError` returns the
+    // "give it another moment" copy instead of a platform timeout.
+    maxRetries: 2,
+    abortSignal: AbortSignal.timeout(20_000),
     tools: {
       update_task_state: tool({
         description: 'Update the state of the current task.',
