@@ -1,6 +1,6 @@
 # Focus Copilot
 
-Agentic executive-function assistant for adults with ADHD. JavaScript (NOT TypeScript), Next.js 15 App Router, Vercel AI SDK v5, Drizzle + Postgres, Vitest + Playwright.
+Agentic executive-function assistant for adults. JavaScript (NOT TypeScript), Next.js 15 App Router, Vercel AI SDK v5, Drizzle + Postgres, Vitest + Playwright.
 
 ## Commands
 - `npm run dev` — dev server

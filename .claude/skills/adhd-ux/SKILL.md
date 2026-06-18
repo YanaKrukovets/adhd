@@ -2,7 +2,7 @@
 description: Review UI copy, flows, or components for ADHD-appropriateness. Auto-apply when writing user-facing copy or session UI.
 ---
 
-# /adhd-ux — ADHD UX Checklist
+# /adhd-ux — UX Checklist
 
 This skill runs automatically whenever user-facing copy or session UI is written or changed. It is also available on demand.
 
