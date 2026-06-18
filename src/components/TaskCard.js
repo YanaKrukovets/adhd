@@ -18,11 +18,13 @@ const ENERGY_COLOR = {
  * @param {number} props.estimateMinutes
  * @param {'low'|'medium'|'high'} props.energy
  * @param {() => void} [props.onDefer]
+ * @param {() => void} [props.onComplete]
  */
-export default function TaskCard({ id, title, firstAction, estimateMinutes, energy, onDefer }) {
+export default function TaskCard({ id, title, firstAction, estimateMinutes, energy, onDefer, onComplete }) {
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [deferring, setDeferring] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [error, setError] = useState(/** @type {string|null} */ (null));
 
@@ -62,6 +64,24 @@ export default function TaskCard({ id, title, firstAction, estimateMinutes, ener
     }
   }
 
+  async function completeTask() {
+    setCompleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      });
+      if (!res.ok) throw new Error('Could not complete task.');
+      setDismissed(true);
+      onComplete?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setCompleting(false);
+    }
+  }
+
   if (dismissed) return null;
 
   return (
@@ -83,16 +103,25 @@ export default function TaskCard({ id, title, firstAction, estimateMinutes, ener
           <button
             type="button"
             onClick={deferTask}
-            disabled={deferring || starting}
+            disabled={deferring || starting || completing}
             className="text-xs text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-40"
           >
             {deferring ? 'Moving…' : 'not today'}
+          </button>
+          <button
+            type="button"
+            onClick={completeTask}
+            disabled={completing || starting || deferring}
+            aria-label={`Mark ${title} done`}
+            className="text-xs text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40"
+          >
+            {completing ? 'Saving…' : 'done'}
           </button>
         </div>
         <button
           type="button"
           onClick={startSession}
-          disabled={starting || deferring}
+          disabled={starting || deferring || completing}
           aria-label={starting ? `Starting session for ${title}` : `Start session for ${title}`}
           className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700 transition-colors disabled:opacity-50"
         >
