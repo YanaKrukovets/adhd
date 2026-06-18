@@ -93,7 +93,14 @@ export async function POST(request, { params }) {
     onError: (error) => {
       // Surface the real cause in server logs — without this the failure is
       // invisible in production (Vercel) and only the generic copy is seen.
-      console.error('[session] stream error:', error);
+      const e = /** @type {any} */ (error);
+      console.error('[session] stream error:', {
+        name: e?.name,
+        statusCode: e?.statusCode ?? e?.status,
+        message: e?.message,
+        causeName: e?.lastError?.name ?? e?.cause?.name,
+        causeMessage: e?.lastError?.message ?? e?.cause?.message,
+      });
       return friendlyStreamError(error);
     },
   });

@@ -14,6 +14,29 @@ describe('friendlyStreamError', () => {
     expect(msg).toContain('free usage limit');
   });
 
+  it('flags a missing API key as a setup problem', () => {
+    const msg = friendlyStreamError({
+      name: 'AI_LoadAPIKeyError',
+      message: 'Google Generative AI API key is missing.',
+    });
+    expect(msg).toContain("isn't set up correctly");
+    expect(msg).toContain('GOOGLE_GENERATIVE_AI_API_KEY');
+  });
+
+  it('flags an invalid API key (400) as a setup problem', () => {
+    const msg = friendlyStreamError({ statusCode: 400, message: 'API key not valid.' });
+    expect(msg).toContain("isn't set up correctly");
+  });
+
+  it('unwraps a RetryError to find the underlying quota cause', () => {
+    const msg = friendlyStreamError({
+      name: 'AI_RetryError',
+      message: 'Failed after 3 attempts.',
+      lastError: { statusCode: 429, message: 'RESOURCE_EXHAUSTED' },
+    });
+    expect(msg).toContain('free usage limit');
+  });
+
   it('tells the user to wait briefly on a 503 overload', () => {
     const msg = friendlyStreamError({ statusCode: 503, message: 'model is UNAVAILABLE' });
     expect(msg).toContain('busy');
