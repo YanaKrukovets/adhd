@@ -49,6 +49,24 @@ Eval baseline scores (planner suite, 5 placeholder fixtures):
 
 ## session-agent.md
 
+### v1.3.0 — 2026-06-17 (default "done" to finished)
+Fix for v1.2.0, which still looped on plain "done". v1.2.0 told the agent a short "done" means *step*-done and to keep asking "what's next?" — exactly the loop we were trying to kill. Reported still-broken by the user in testing.
+
+Change: invert the default. Plain "done" / "did it" / "finished" / "next" / "that's it" now means the **task** is complete → confirm once → `update_task_state(done)` → `end_session`. The "keep going with what's next?" path is now the *exception*, gated on a real already-known remaining sub-step (i.e. a prior `split_task` whose sub-steps aren't all done). Without such a tracked step, "done" closes the task.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (quota-blocked) | — (quota-blocked) |
+| tone_shame_free | — (quota-blocked) | — (quota-blocked) |
+| correct_tool_selection | — (quota-blocked) | — (quota-blocked) |
+
+⚠️ Still quota-blocked (Gemini free-tier 429s). Re-run `npm run evals:session` once quota resets / billing is enabled and backfill v1.2.0 + v1.3.0.
+
+Hypothesis: the loop was caused by the prompt's own default ("done" = step). Making "finished" the default and "continue" the gated exception matches how single-action tasks actually behave, and stops the model padding the session.
+
+---
+
 ### v1.2.0 — 2026-06-17 (task-completion detection)
 Added a "Recognizing when the task is finished" section so the agent stops looping on "what's next?" forever.
 
