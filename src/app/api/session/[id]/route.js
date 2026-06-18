@@ -101,7 +101,16 @@ export async function POST(request, { params }) {
         causeName: e?.lastError?.name ?? e?.cause?.name,
         causeMessage: e?.lastError?.message ?? e?.cause?.message,
       });
-      return friendlyStreamError(error);
+      const friendly = friendlyStreamError(error);
+      // TEMP DIAGNOSTIC: when the error wasn't specifically classified, append a
+      // safe signature (error class + status, no secrets) so the cause is
+      // visible in the UI for users who can't read Vercel logs. Remove once the
+      // production failure is identified.
+      const cause = e?.lastError ?? e?.cause ?? e;
+      const sig = `${cause?.name ?? e?.name ?? 'Error'}${
+        cause?.statusCode ?? cause?.status ?? e?.statusCode ? `/${cause?.statusCode ?? cause?.status ?? e?.statusCode}` : ''
+      }`;
+      return friendly.startsWith("Couldn't reach") ? `${friendly} (ref: ${sig})` : friendly;
     },
   });
 }
