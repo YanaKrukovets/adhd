@@ -747,7 +747,7 @@ export default function MeditationScene() {
       </div>
 
       {/* Breathing orb */}
-      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-10 px-6">
+      <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center gap-10 px-6">
         <div className="relative flex items-center justify-center">
           <div
             aria-hidden="true"
@@ -777,7 +777,7 @@ export default function MeditationScene() {
           onClick={toggleSound}
           aria-pressed={soundOn}
           aria-label={soundOn ? 'Turn off sea sounds' : 'Turn on sea sounds'}
-          className="rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/25 transition-colors"
+          className="pointer-events-auto rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/25 transition-colors"
         >
           <span aria-hidden="true">{soundOn ? '🔊' : '🔇'}</span> {soundOn ? 'Sea sounds on' : 'Turn on sea sounds'}
         </button>
