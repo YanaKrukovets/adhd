@@ -29,28 +29,36 @@ function findToolOutput(message, toolName) {
 /**
  * @param {object} props
  * @param {string} props.sessionId
+ * @param {string|null} [props.taskId] bound task id — completion writes directly to it
  * @param {string} props.taskTitle
  * @param {string} props.firstAction
+ * @param {Array<any>} [props.initialMessages] persisted transcript to rehydrate on reload
  */
-export default function SessionChat({ sessionId, taskTitle, firstAction }) {
+export default function SessionChat({ sessionId, taskId = null, taskTitle, firstAction, initialMessages = [] }) {
   const bottomRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const checkinTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null));
   const sessionStartedRef = useRef(false);
   const sessionEndedRef = useRef(false);
   const [input, setInput] = useState('');
+  const [completing, setCompleting] = useState(false);
+  const [completeFailed, setCompleteFailed] = useState(false);
 
   const { messages, sendMessage, status, error } = useChat({
     id: sessionId,
+    messages: initialMessages,
     transport: new DefaultChatTransport({ api: `/api/session/${sessionId}` }),
     onError: (err) => console.error('[session chat]', err),
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  // Trigger initial agent greeting once on mount
+  // Trigger initial agent greeting once on mount — but only for a genuinely
+  // fresh session. When we rehydrated a transcript on reload, the conversation
+  // is already underway, so re-greeting would duplicate the opener.
   useEffect(() => {
     if (sessionStartedRef.current) return;
     sessionStartedRef.current = true;
+    if (initialMessages.length > 0) return;
     sendMessage({ text: `[session:start] task="${taskTitle}" first_action="${firstAction}"` });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -90,10 +98,45 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
     };
   }, []);
 
+  // Mark the task done deterministically (direct DB write), THEN let the agent
+  // wrap up the conversation. Completion no longer rides on the model choosing
+  // to call update_task_state — a flaky/timed-out agent reply can't strand the
+  // task in today's list anymore.
+  async function completeTask() {
+    setCompleting(true);
+    setCompleteFailed(false);
+    if (taskId) {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'complete' }),
+        });
+        if (!res.ok) throw new Error('complete failed');
+      } catch {
+        setCompleteFailed(true);
+        setCompleting(false);
+        return;
+      }
+    }
+    sendMessage({
+      text: `[session:complete] The user marked the whole task done. It's already saved as complete — just celebrate briefly and wrap up the session.`,
+    });
+    setCompleting(false);
+  }
+
   const endResult = messages
     .filter((m) => m.role === 'assistant')
     .map((m) => findToolOutput(m, 'end_session'))
     .find(Boolean);
+
+  // Surface a failed state write. If the task couldn't be updated (e.g. no task
+  // bound to the session), the agent's reply alone would look like success
+  // while the task quietly stays in today's list — so flag it plainly.
+  const stateUpdateFailed = messages
+    .filter((m) => m.role === 'assistant')
+    .map((m) => findToolOutput(m, 'update_task_state'))
+    .some((out) => out && out.ok === false);
 
   const visibleMessages = messages.filter((m) => !(m.role === 'user' && getMessageText(m).startsWith('[session:')));
 
@@ -152,6 +195,24 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
           {error.message || "Couldn't reach the assistant just now — give it another moment and try again."}
         </div>
       )}
+
+      {(stateUpdateFailed || completeFailed) && (
+        <div role="alert" className="self-start max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          We couldn&apos;t save that change just now, so this task may still show up under today. Try again in a moment.
+        </div>
+      )}
+
+      {/* Quick actions */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={completeTask}
+          disabled={isLoading || completing}
+          className="rounded-full border border-stone-200 px-3 py-1 text-xs font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition-colors disabled:opacity-40"
+        >
+          {completing ? 'Saving…' : 'This task is done'}
+        </button>
+      </div>
 
       {/* Input */}
       <form

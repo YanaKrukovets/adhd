@@ -118,6 +118,24 @@ export async function getPendingTasksForReplan(userId) {
 }
 
 /**
+ * Count tasks waiting in the pending pool (not on today's list, not done).
+ * Used only to show a gentle "more ready when you are" hint — the pool itself
+ * stays hidden to avoid overwhelm.
+ * @param {string} userId
+ * @returns {Promise<number>}
+ */
+export async function getQueuedTaskCount(userId) {
+  const [row] = await db.select({ count: sql`COUNT(*)`.mapWith(Number) })
+    .from(tasks)
+    .where(and(
+      eq(tasks.userId, userId),
+      eq(tasks.isToday, false),
+      eq(tasks.state, 'pending')
+    ));
+  return row?.count ?? 0;
+}
+
+/**
  * Get trailing-7-day actual throughput for calibration weighting.
  * @param {string} userId
  * @returns {Promise<number>} average tasks completed per day
@@ -198,6 +216,35 @@ export async function getSessionEvents(sessionId) {
     .orderBy(sessionEvents.createdAt);
 }
 
+/**
+ * Conversation transcript for rehydrating the chat UI on reload: only the
+ * user_message / agent_message events, in chronological order. Synthetic
+ * `[session:*]` prompts are never persisted as user_message rows, so they're
+ * naturally excluded.
+ * @param {string} sessionId
+ * @returns {Promise<Array<{ id: string, role: 'user' | 'assistant', content: string }>>}
+ */
+export async function getSessionMessages(sessionId) {
+  const rows = await db.select({
+    id: sessionEvents.id,
+    role: sessionEvents.role,
+    content: sessionEvents.content,
+  }).from(sessionEvents)
+    .where(and(
+      eq(sessionEvents.sessionId, sessionId),
+      sql`${sessionEvents.eventType} IN ('user_message', 'agent_message')`
+    ))
+    .orderBy(sessionEvents.createdAt);
+
+  return rows
+    .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content)
+    .map((r) => ({
+      id: r.id,
+      role: /** @type {'user' | 'assistant'} */ (r.role),
+      content: /** @type {string} */ (r.content),
+    }));
+}
+
 // ---- Agent Calls ----
 
 /**
@@ -210,12 +257,24 @@ export async function logAgentCall(call) {
 }
 
 /**
- * Morning replan: clear today flags for all open tasks, then mark up to 3 as today.
- * Selects smallest tasks first so the user gets quick wins.
+ * Morning replan: carry yesterday's unfinished plan forward first, then backfill
+ * up to the 3-task cap with quick wins. Unfinished work rolls forward silently —
+ * it is never dropped from the list (hard rule #3).
  * @param {string} userId
- * @returns {Promise<Array<typeof tasks.$inferSelect>>} newly selected today tasks
+ * @returns {Promise<Array<typeof tasks.$inferSelect>>} today's task list
  */
 export async function replanToday(userId) {
+  // Yesterday's unfinished plan: still flagged today and not done. These roll
+  // forward — capture them BEFORE clearing flags so they keep priority.
+  const carriedForward = await db.select().from(tasks)
+    .where(and(
+      eq(tasks.userId, userId),
+      eq(tasks.isToday, true),
+      sql`${tasks.state} IN ('today', 'deferred')`
+    ))
+    .orderBy(tasks.order, tasks.createdAt)
+    .limit(3);
+
   // Clear today from everything not done/in_progress
   await db.update(tasks)
     .set({ isToday: false, state: 'pending' })
@@ -224,20 +283,30 @@ export async function replanToday(userId) {
       sql`${tasks.state} IN ('today', 'pending', 'deferred')`
     ));
 
-  // Pick up to 3 tasks ordered by estimate asc (quick wins first), then creation order
-  const candidates = await db.select().from(tasks)
-    .where(and(eq(tasks.userId, userId), eq(tasks.state, 'pending')))
-    .orderBy(tasks.estimateMinutes, tasks.createdAt)
-    .limit(3);
+  // Backfill remaining slots with quick wins (shortest estimate first),
+  // excluding anything already carried forward.
+  const carriedIds = carriedForward.map((t) => t.id);
+  const remaining = 3 - carriedForward.length;
+  const backfill = remaining > 0
+    ? await db.select().from(tasks)
+        .where(and(
+          eq(tasks.userId, userId),
+          eq(tasks.state, 'pending'),
+          carriedIds.length ? sql`${tasks.id} != ALL(${carriedIds})` : sql`TRUE`
+        ))
+        .orderBy(tasks.estimateMinutes, tasks.createdAt)
+        .limit(remaining)
+    : [];
 
-  if (candidates.length === 0) return [];
+  const selected = [...carriedForward, ...backfill];
+  if (selected.length === 0) return [];
 
-  const ids = candidates.map((t) => t.id);
+  const ids = selected.map((t) => t.id);
   await db.update(tasks)
     .set({ isToday: true, state: 'today' })
     .where(and(eq(tasks.userId, userId), sql`${tasks.id} = ANY(${ids})`));
 
-  return candidates;
+  return selected;
 }
 
 /**

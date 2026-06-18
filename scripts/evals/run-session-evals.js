@@ -71,6 +71,16 @@ const SCENARIOS = [
       { role: 'user', content: "I can't continue, I need my T4 slip and I don't have it yet, my employer hasn't sent it" },
     ],
   },
+  {
+    id: 's006',
+    name: 'Single-step task: plain "done" must close out, not ask what\'s next',
+    // Task is one small step with no prior split_task. "done" = task finished.
+    // Regression guard: the agent must offer to close out, never reply "What's next?".
+    turns: [
+      { role: 'assistant', content: "Okay, I'm here. Let me know when you've found it." },
+      { role: 'user', content: 'done' },
+    ],
+  },
 ];
 
 /**
@@ -147,6 +157,7 @@ async function runSessionEvals() {
       's003': "That sounds really frustrating. What part is feeling pointless right now — the task itself, or something else?",
       's004': "Okay, that makes sense — tax forms often have a lot of sections. Want to break it down into smaller pieces so we can tackle one section at a time?",
       's005': "Got it. I'll log that as a blocker — waiting on T4 from employer. Want to move on to something else while you wait, or wrap up for now?",
+      's006': "Nice — that's the download button found. Want to close it out?",
     };
     return stubs[scenario.id] ?? "I'm here. What do you need?";
   };

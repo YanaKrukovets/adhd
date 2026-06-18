@@ -134,8 +134,10 @@ describe('TaskStateSchema — overdue must be rejected', () => {
 });
 
 describe('UpdateTaskStateInputSchema', () => {
-  it('rejects missing taskId', () => {
-    expect(() => UpdateTaskStateInputSchema.parse({ state: 'done' })).toThrow();
+  it('allows missing taskId (server overrides with session-bound id)', () => {
+    const result = UpdateTaskStateInputSchema.parse({ state: 'done' });
+    expect(result.state).toBe('done');
+    expect(result.taskId).toBeUndefined();
   });
 
   it('rejects "overdue" state', () => {

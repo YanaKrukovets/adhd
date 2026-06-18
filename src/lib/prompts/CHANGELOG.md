@@ -49,6 +49,82 @@ Eval baseline scores (planner suite, 5 placeholder fixtures):
 
 ## session-agent.md
 
+### v1.5.0 — 2026-06-18 (complete the task atomically on wrap-up)
+Bug: after a chat wrap-up the finished task still reappeared under Today. `end_session` only ended the *session* — it never marked the *task* done. Completion rode on the model also firing `update_task_state(done)`, which the lite model/free-tier often skips, leaving `isToday=true`.
+
+Change (paired with a code change): `end_session` now takes a `task_completed` flag. The prompt now tells the agent to wrap up a *finished* task with a single `end_session(task_completed: true)` call — the tool marks the bound task done deterministically (state=done, isToday=false, completedAt). For "stopping for now" the flag stays false and work rolls forward silently (no false "done"). Removed the now-redundant two-step "update_task_state(done) then end_session".
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (key/quota-blocked) | — (key/quota-blocked) |
+| tone_shame_free | — (key/quota-blocked) | — (key/quota-blocked) |
+| correct_tool_selection | — (key/quota-blocked) | — (key/quota-blocked) |
+
+⚠️ Evals NOT run: `GOOGLE_GENERATIVE_AI_API_KEY` unset (same gap as v1.2.0–v1.4.0). The harness also still judges stub strings, not the real agent — wire it to `runSessionAgent` before these scores mean anything.
+
+Hypothesis: collapsing completion into one tool call removes the failure window where the model ends the session but forgets to mark the task done. Deterministic DB write inside the tool, not a second model decision.
+
+---
+
+### v1.4.0 — 2026-06-18 (pin the "done" → close-out behavior with an example)
+Fix for a bug still seen in prod on v1.3.0: a single-step task ("Identify the download button"), user typed "done" in chat, agent replied **"Got it. What's next?"** instead of offering to close out — then only reached the wrap-up question after a *second* "done". v1.3.0 already made "finished" the default in prose, but the running model (`gemini-3.1-flash-lite`) fumbles the conditional ("is there a prior `split_task` sub-step?") and falls back to "what's next?".
+
+Change: added an explicit negative rule (never reply "What's next?" to a "done" signal) plus a pinned wrong/right few-shot example using the exact failing phrase. No change to the underlying logic — only making the existing v1.3.0 intent unmissable for a weak lite model. The deterministic "This task is done" *button* path (commit 3802bb0) was already fixed; this targets the free-text chat path.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (key/quota-blocked) | — (key/quota-blocked) |
+| tone_shame_free | — (key/quota-blocked) | — (key/quota-blocked) |
+| correct_tool_selection | — (key/quota-blocked) | — (key/quota-blocked) |
+
+⚠️ Evals NOT run: `GOOGLE_GENERATIVE_AI_API_KEY` is unset in this environment (`npm run evals:session` errors out before any call). Same gap as v1.2.0/v1.3.0. Re-run and backfill once a key/billing is available. Note: the current session suite has **no scenario** covering "single done → close out" — add one (s006) so this regression is caught automatically.
+
+Hypothesis: lite models follow concrete few-shot examples far more reliably than multi-condition prose rules. Pinning the exact wrong phrase ("Got it. What's next?") to a correct rewrite removes the model's room to default into the loop.
+
+---
+
+### v1.3.0 — 2026-06-17 (default "done" to finished)
+Fix for v1.2.0, which still looped on plain "done". v1.2.0 told the agent a short "done" means *step*-done and to keep asking "what's next?" — exactly the loop we were trying to kill. Reported still-broken by the user in testing.
+
+Change: invert the default. Plain "done" / "did it" / "finished" / "next" / "that's it" now means the **task** is complete → confirm once → `update_task_state(done)` → `end_session`. The "keep going with what's next?" path is now the *exception*, gated on a real already-known remaining sub-step (i.e. a prior `split_task` whose sub-steps aren't all done). Without such a tracked step, "done" closes the task.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (quota-blocked) | — (quota-blocked) |
+| tone_shame_free | — (quota-blocked) | — (quota-blocked) |
+| correct_tool_selection | — (quota-blocked) | — (quota-blocked) |
+
+⚠️ Still quota-blocked (Gemini free-tier 429s). Re-run `npm run evals:session` once quota resets / billing is enabled and backfill v1.2.0 + v1.3.0.
+
+Hypothesis: the loop was caused by the prompt's own default ("done" = step). Making "finished" the default and "continue" the gated exception matches how single-action tasks actually behave, and stops the model padding the session.
+
+---
+
+### v1.2.0 — 2026-06-17 (task-completion detection)
+Added a "Recognizing when the task is finished" section so the agent stops looping on "what's next?" forever.
+
+Problem: the agent only exits via `update_task_state(done)` or `end_session`, both of which it fired only on an explicit "I'm stopping." A user answering each step with "done" got an endless "That's done — what's next?" loop because nothing tied completion to the task itself.
+
+Change: guidance to distinguish *step*-done from *task*-done. When the original task/first action looks satisfied (or the user signals "that's it / all done / finished", or the agent notices it's manufacturing follow-up steps), confirm once — "Sounds like [task] itself is done — want to close it out?" — then call `update_task_state(done)` followed by `end_session`. Explicit instruction not to invent steps to keep the session alive.
+
+Paired with a UI change: a "Mark done" affordance in SessionChat so users aren't reliant on the model inferring completion from free text.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (quota-blocked) | — (quota-blocked) |
+| tone_shame_free | — (quota-blocked) | — (quota-blocked) |
+| correct_tool_selection | — (quota-blocked) | — (quota-blocked) |
+
+⚠️ Evals NOT run cleanly: the Gemini free-tier judge returned 429s — 4 of 5 scenarios scored a flat 0/2 and one a perfect 2/2 (the all-or-nothing signature of quota errors, not genuine scores). Re-run `npm run evals:session` once quota resets / billing is enabled and backfill this table. Change shipped at user's direction with this gap acknowledged.
+
+Hypothesis: making "finished" a first-class concept (confirm-then-close) breaks the infinite "what's next?" loop without violating the body-double posture — the agent confirms rather than unilaterally declaring done, and refuses to pad the session to stay busy.
+
+---
+
 ### v1.1.0 — 2026-06-13 (flow mode)
 Added `enter_flow_mode` tool and updated check-in protocol to support first-class flow state.
 

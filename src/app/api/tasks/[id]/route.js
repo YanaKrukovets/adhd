@@ -5,12 +5,14 @@ import { auth } from '@/lib/auth.js';
 import { updateTask } from '@/lib/db/queries.js';
 
 const PatchTaskSchema = z.object({
-  action: z.enum(['defer']),
+  action: z.enum(['defer', 'complete']),
 });
 
 /**
  * PATCH /api/tasks/[id]
- * Supported actions: defer — moves task off today without judgment.
+ * Supported actions:
+ *   defer    — moves task off today without judgment.
+ *   complete — marks the task done deterministically (no LLM in the loop).
  *
  * @param {Request} request
  * @param {{ params: Promise<{ id: string }> }} context
@@ -37,6 +39,18 @@ export async function PATCH(request, context) {
     const updated = await updateTask(taskId, userId, {
       state: 'deferred',
       isToday: false,
+    });
+    if (!updated) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === 'complete') {
+    const updated = await updateTask(taskId, userId, {
+      state: 'done',
+      isToday: false,
+      completedAt: new Date(),
     });
     if (!updated) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });

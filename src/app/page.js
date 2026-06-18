@@ -28,6 +28,17 @@ export default function LandingPage() {
         <p className="mt-12 text-sm text-stone-500">
           No timers. No streaks. No judgment.
         </p>
+        <nav className="mt-8 flex justify-center gap-5 text-sm text-stone-500">
+          <Link href="/about" className="hover:text-stone-700 transition-colors">
+            About
+          </Link>
+          <Link href="/how-it-works" className="hover:text-stone-700 transition-colors">
+            How it works
+          </Link>
+          <Link href="/privacy" className="hover:text-stone-700 transition-colors">
+            Privacy
+          </Link>
+        </nav>
       </div>
     </main>
   );
