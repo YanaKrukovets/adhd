@@ -153,6 +153,22 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
         </div>
       )}
 
+      {/* Quick actions */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() =>
+            sendMessage({
+              text: `[session:complete] The user marked the whole task done. Confirm it's complete, call update_task_state done, then wrap up the session.`,
+            })
+          }
+          disabled={isLoading}
+          className="rounded-full border border-stone-200 px-3 py-1 text-xs font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition-colors disabled:opacity-40"
+        >
+          This task is done
+        </button>
+      </div>
+
       {/* Input */}
       <form
         onSubmit={(e) => {

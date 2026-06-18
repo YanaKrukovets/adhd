@@ -49,6 +49,28 @@ Eval baseline scores (planner suite, 5 placeholder fixtures):
 
 ## session-agent.md
 
+### v1.2.0 — 2026-06-17 (task-completion detection)
+Added a "Recognizing when the task is finished" section so the agent stops looping on "what's next?" forever.
+
+Problem: the agent only exits via `update_task_state(done)` or `end_session`, both of which it fired only on an explicit "I'm stopping." A user answering each step with "done" got an endless "That's done — what's next?" loop because nothing tied completion to the task itself.
+
+Change: guidance to distinguish *step*-done from *task*-done. When the original task/first action looks satisfied (or the user signals "that's it / all done / finished", or the agent notices it's manufacturing follow-up steps), confirm once — "Sounds like [task] itself is done — want to close it out?" — then call `update_task_state(done)` followed by `end_session`. Explicit instruction not to invent steps to keep the session alive.
+
+Paired with a UI change: a "Mark done" affordance in SessionChat so users aren't reliant on the model inferring completion from free text.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (quota-blocked) | — (quota-blocked) |
+| tone_shame_free | — (quota-blocked) | — (quota-blocked) |
+| correct_tool_selection | — (quota-blocked) | — (quota-blocked) |
+
+⚠️ Evals NOT run cleanly: the Gemini free-tier judge returned 429s — 4 of 5 scenarios scored a flat 0/2 and one a perfect 2/2 (the all-or-nothing signature of quota errors, not genuine scores). Re-run `npm run evals:session` once quota resets / billing is enabled and backfill this table. Change shipped at user's direction with this gap acknowledged.
+
+Hypothesis: making "finished" a first-class concept (confirm-then-close) breaks the infinite "what's next?" loop without violating the body-double posture — the agent confirms rather than unilaterally declaring done, and refuses to pad the session to stay busy.
+
+---
+
 ### v1.1.0 — 2026-06-13 (flow mode)
 Added `enter_flow_mode` tool and updated check-in protocol to support first-class flow state.
 
