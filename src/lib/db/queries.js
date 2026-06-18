@@ -1,9 +1,12 @@
 // @ts-check
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './index.js';
 import {
   users, intentions, tasks, workSessions, sessionEvents, agentCalls,
 } from './schema.js';
+
+// Hard cap on tasks visible on the today list (CLAUDE.md rule #4). Never raise this.
+export const MAX_TODAY_TASKS = 3;
 
 // ---- Users ----
 
@@ -66,7 +69,7 @@ export async function getTodayTasks(userId) {
   return db.select().from(tasks)
     .where(and(eq(tasks.userId, userId), eq(tasks.isToday, true)))
     .orderBy(tasks.order)
-    .limit(3);
+    .limit(MAX_TODAY_TASKS);
 }
 
 /**
@@ -133,6 +136,34 @@ export async function getQueuedTaskCount(userId) {
       eq(tasks.state, 'pending')
     ));
   return row?.count ?? 0;
+}
+
+/**
+ * Pull the next pending tasks onto today's list, oldest first (same ordering as
+ * replan). Moves AT MOST `limit` tasks — callers compute `limit` as the number of
+ * free slots (MAX_TODAY_TASKS minus current today count) so the today list never
+ * exceeds the hard cap. This is the "refill as space clears" behaviour: it tops
+ * the list back up, it never grows it past 3.
+ * @param {string} userId
+ * @param {number} limit - free slots to fill; <= 0 is a no-op
+ * @returns {Promise<number>} how many tasks were moved onto today
+ */
+export async function pullNextPendingTasks(userId, limit) {
+  if (limit <= 0) return 0;
+  const pending = await db.select({ id: tasks.id }).from(tasks)
+    .where(and(
+      eq(tasks.userId, userId),
+      eq(tasks.isToday, false),
+      eq(tasks.state, 'pending')
+    ))
+    .orderBy(tasks.createdAt)
+    .limit(limit);
+  if (pending.length === 0) return 0;
+  const ids = pending.map((t) => t.id);
+  await db.update(tasks)
+    .set({ isToday: true, state: 'today' })
+    .where(and(eq(tasks.userId, userId), inArray(tasks.id, ids)));
+  return pending.length;
 }
 
 /**

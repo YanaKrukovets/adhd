@@ -5,6 +5,22 @@ Each entry must include before/after eval scores for all rubric dimensions.
 
 ---
 
+## calm-companion.md
+
+### v1.0.0 — 2026-06-18 (initial)
+New prompt for the Calm Companion — a separate, stateless chat agent (not the body-double session agent) for moments when the user is too overwhelmed/anxious/frozen to start. Scope: down-regulate first, concrete step only if/when they want it.
+
+Establishes:
+- Posture: grounding presence, explicitly **not** a therapist; no diagnosis, no medical advice.
+- Help order: acknowledge & normalize → offer a body-calming tool (4-4-6 breath, 5-4-3-2-1 senses, "this passes") → take weight off the pile → only then, optionally, one ≤5min step.
+- Voice: validate first; banned minimizing phrases ("calm down", "just relax", "at least…"); no shame language (CLAUDE.md rule 10).
+- Safety boundary: self-harm / crisis → stop, hand off to 988 / a real human, do not counsel through it.
+- No manufactured urgency, no countdown, no streak (CLAUDE.md rule 6).
+
+Eval scores: **no eval suite exists for this agent yet.** The planner/session suites don't cover it. A `calm` suite (rubric: validates-before-advising, no-minimizing-language, crisis-handoff-correctness, doesn't-push-task-prematurely) should be added before this prompt is iterated. Shipped at user's direction without automated scores; tracked as a gap.
+
+---
+
 ## planner.md
 
 ### v1.1.0 — 2026-06-13 (activation energy + self-critique)
