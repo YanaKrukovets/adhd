@@ -76,6 +76,7 @@ export default async function SessionPage({ params }) {
       <div className="mt-6">
         <SessionChat
           sessionId={id}
+          taskId={workSession.taskId ?? null}
           taskTitle={task?.title ?? 'your task'}
           firstAction={task?.firstAction ?? ''}
           initialMessages={initialMessages}

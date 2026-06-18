@@ -29,16 +29,19 @@ function findToolOutput(message, toolName) {
 /**
  * @param {object} props
  * @param {string} props.sessionId
+ * @param {string|null} [props.taskId] bound task id — completion writes directly to it
  * @param {string} props.taskTitle
  * @param {string} props.firstAction
  * @param {Array<any>} [props.initialMessages] persisted transcript to rehydrate on reload
  */
-export default function SessionChat({ sessionId, taskTitle, firstAction, initialMessages = [] }) {
+export default function SessionChat({ sessionId, taskId = null, taskTitle, firstAction, initialMessages = [] }) {
   const bottomRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const checkinTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null));
   const sessionStartedRef = useRef(false);
   const sessionEndedRef = useRef(false);
   const [input, setInput] = useState('');
+  const [completing, setCompleting] = useState(false);
+  const [completeFailed, setCompleteFailed] = useState(false);
 
   const { messages, sendMessage, status, error } = useChat({
     id: sessionId,
@@ -94,6 +97,33 @@ export default function SessionChat({ sessionId, taskTitle, firstAction, initial
       if (checkinTimerRef.current) clearTimeout(checkinTimerRef.current);
     };
   }, []);
+
+  // Mark the task done deterministically (direct DB write), THEN let the agent
+  // wrap up the conversation. Completion no longer rides on the model choosing
+  // to call update_task_state — a flaky/timed-out agent reply can't strand the
+  // task in today's list anymore.
+  async function completeTask() {
+    setCompleting(true);
+    setCompleteFailed(false);
+    if (taskId) {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'complete' }),
+        });
+        if (!res.ok) throw new Error('complete failed');
+      } catch {
+        setCompleteFailed(true);
+        setCompleting(false);
+        return;
+      }
+    }
+    sendMessage({
+      text: `[session:complete] The user marked the whole task done. It's already saved as complete — just celebrate briefly and wrap up the session.`,
+    });
+    setCompleting(false);
+  }
 
   const endResult = messages
     .filter((m) => m.role === 'assistant')
@@ -166,7 +196,7 @@ export default function SessionChat({ sessionId, taskTitle, firstAction, initial
         </div>
       )}
 
-      {stateUpdateFailed && (
+      {(stateUpdateFailed || completeFailed) && (
         <div role="alert" className="self-start max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           We couldn&apos;t save that change just now, so this task may still show up under today. Try again in a moment.
         </div>
@@ -176,15 +206,11 @@ export default function SessionChat({ sessionId, taskTitle, firstAction, initial
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() =>
-            sendMessage({
-              text: `[session:complete] The user marked the whole task done. Confirm it's complete, call update_task_state done, then wrap up the session.`,
-            })
-          }
-          disabled={isLoading}
+          onClick={completeTask}
+          disabled={isLoading || completing}
           className="rounded-full border border-stone-200 px-3 py-1 text-xs font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition-colors disabled:opacity-40"
         >
-          This task is done
+          {completing ? 'Saving…' : 'This task is done'}
         </button>
       </div>
 
