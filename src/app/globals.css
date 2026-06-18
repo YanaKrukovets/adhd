@@ -75,10 +75,45 @@ body {
   }
 }
 
+/* A fish drifts across the screen, bobbing gently up and down as it goes.
+   Direction is set per-fish with scaleX on the inner element. */
+@keyframes fish-swim {
+  0% {
+    transform: translateX(-12vw) translateY(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: var(--fish-opacity, 0.7);
+  }
+  50% {
+    transform: translateX(56vw) translateY(var(--fish-bob, -16px));
+  }
+  92% {
+    opacity: var(--fish-opacity, 0.7);
+  }
+  100% {
+    transform: translateX(124vw) translateY(0);
+    opacity: 0;
+  }
+}
+
+/* Seaweed sways from its anchored base, like a slow current pushing it. */
+@keyframes seaweed-sway {
+  0%,
+  100% {
+    transform: rotate(calc(var(--seaweed-tilt, 6deg) * -1));
+  }
+  50% {
+    transform: rotate(var(--seaweed-tilt, 6deg));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .meditation-bubble,
   .meditation-caustics,
-  .meditation-orb-glow {
+  .meditation-orb-glow,
+  .meditation-fish,
+  .meditation-seaweed {
     animation: none !important;
   }
 }

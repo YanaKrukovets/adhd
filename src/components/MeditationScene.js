@@ -16,59 +16,322 @@ const BREATH_PHASES = [
 ];
 
 /**
+ * Fills an audio buffer's single channel with brown noise (a running integral
+ * of white noise, normalized). Brown noise is weighted to low frequencies, so
+ * it reads as ocean/wind rather than static. `gain` scales the final amplitude.
+ *
+ * @param {AudioBuffer} buffer
+ * @param {number} [gain]
+ */
+function fillBrownNoise(buffer, gain = 3.5) {
+  fillBrownNoise2(buffer, 0, gain);
+}
+
+/**
+ * Like {@link fillBrownNoise} but targets a specific channel, so stereo buffers
+ * can be filled with independent (decorrelated) noise per side.
+ *
+ * The buffer is made loop-SEAMLESS: brown noise doesn't naturally wrap, so a
+ * raw looped buffer clicks every time it restarts (the last sample doesn't
+ * match the first). We generate a little extra tail and cosine-crossfade it
+ * back over the head, so the seam is continuous and the loop is silent.
+ *
+ * @param {AudioBuffer} buffer
+ * @param {number} channel
+ * @param {number} [gain]
+ */
+function fillBrownNoise2(buffer, channel, gain = 3.5) {
+  const data = buffer.getChannelData(channel);
+  const n = data.length;
+  const fade = Math.min(Math.floor(buffer.sampleRate * 0.05), Math.floor(n / 4));
+  const tmp = new Float32Array(n + fade);
+  let last = 0;
+  for (let i = 0; i < tmp.length; i++) {
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.02 * white) / 1.02;
+    tmp[i] = last * gain;
+  }
+  for (let i = 0; i < n; i++) data[i] = tmp[i];
+  // Crossfade the head with the natural continuation past the end (tmp[n..]),
+  // so playback flows tmp[n-1] → data[0] (= tmp[n]) without a discontinuity.
+  for (let j = 0; j < fade; j++) {
+    const w = 0.5 - 0.5 * Math.cos((Math.PI * j) / fade); // 0 → 1
+    data[j] = data[j] * w + tmp[n + j] * (1 - w);
+  }
+}
+
+/**
+ * Generates a stereo "decaying noise" impulse response for a ConvolverNode — a
+ * cheap synthetic reverb that gives the soundscape a sense of open space (a
+ * beach, not a sealed room). Left/right are independent so the tail is wide.
+ *
+ * @param {AudioContext} ctx
+ * @param {number} [seconds]  tail length
+ * @param {number} [decay]    higher = faster falloff
+ * @returns {AudioBuffer}
+ */
+function makeReverbImpulse(ctx, seconds = 2.6, decay = 2.2) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  return buf;
+}
+
+/**
  * Builds and starts a self-contained "calm sea" soundscape using the Web Audio
- * API — looped brown noise through a lowpass filter (the muffled underwater
- * wash) with a slow gain LFO for wave swell. No audio file needed.
+ * API — no audio file needed. Several layers, plus stereo width and a touch of
+ * reverb, make it read as real surf rather than a steady drone:
+ *
+ *   1. A quiet STEREO brown-noise bed (independent L/R) — the distant
+ *      ocean/wind floor that surrounds the listener.
+ *   2. Discrete WAVE EVENTS at irregular intervals, each panned somewhere in
+ *      the field. A wave is itself three bands: a low BODY that swells and
+ *      breaks, a high FIZZ that peaks just *after* the break and lingers (the
+ *      sound of foam), and a sparse CRACKLE of foam bursts during the recede.
+ *   3. Sparse WATER BUBBLES — short sine "plinks" with a fast upward pitch
+ *      sweep, sometimes in little clusters, for close-up intimacy.
+ *
+ * Everything runs into a light convolution reverb for open-air space.
  *
  * @param {AudioContext} ctx
  * @returns {() => void} stop function that tears the graph down
  */
 function startSeaSound(ctx) {
-  // ~3s of brown noise, looped. Brown (vs white) noise is weighted to low
-  // frequencies, which reads as ocean/wind rather than static.
-  const bufferSize = ctx.sampleRate * 3;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < bufferSize; i++) {
-    const white = Math.random() * 2 - 1;
-    last = (last + 0.02 * white) / 1.02;
-    data[i] = last * 3.5;
+  let stopped = false;
+  /** @type {Set<ReturnType<typeof setTimeout>>} */
+  const timers = new Set();
+  /**
+   * setTimeout that auto-forgets itself and no-ops after teardown.
+   * @param {() => void} fn
+   * @param {number} ms
+   */
+  function later(fn, ms) {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      if (!stopped) fn();
+    }, ms);
+    timers.add(id);
+    return id;
   }
 
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.loop = true;
+  /**
+   * @param {number} min
+   * @param {number} max
+   */
+  const rand = (min, max) => min + Math.random() * (max - min);
 
-  // Lowpass for the soft, underwater muffle.
-  const lowpass = ctx.createBiquadFilter();
-  lowpass.type = 'lowpass';
-  lowpass.frequency.value = 650;
-
-  // Master gain, kept gentle.
+  // --- Master + reverb space -----------------------------------------------
+  // master → dry → out, and master → reverb → wet → out. The fade-in lives on
+  // master so it covers every layer at once.
   const master = ctx.createGain();
-  master.gain.value = 0.0;
+  master.gain.value = 0.0001;
 
-  // Slow swell: an LFO modulating master gain ~ every 9s, like waves rolling in.
-  const lfo = ctx.createOscillator();
-  lfo.frequency.value = 0.11;
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.value = 0.06;
-  lfo.connect(lfoGain).connect(master.gain);
+  const dry = ctx.createGain();
+  dry.gain.value = 1;
+  const convolver = ctx.createConvolver();
+  convolver.buffer = makeReverbImpulse(ctx);
+  const wet = ctx.createGain();
+  wet.gain.value = 0.28;
 
-  source.connect(lowpass).connect(master).connect(ctx.destination);
+  master.connect(dry).connect(ctx.destination);
+  master.connect(convolver).connect(wet).connect(ctx.destination);
 
-  source.start();
-  lfo.start();
-  // Fade in so it doesn't pop on.
   master.gain.setValueAtTime(0.0001, ctx.currentTime);
-  master.gain.exponentialRampToValueAtTime(0.14, ctx.currentTime + 2.5);
+  master.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 2.5);
+
+  // --- Layer 1: the constant distant-ocean bed (stereo) --------------------
+  // Two independent channels of brown noise so the floor is wide, not a point.
+  const bedBuffer = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) fillBrownNoise2(bedBuffer, ch, 3.5);
+  const bed = ctx.createBufferSource();
+  bed.buffer = bedBuffer;
+  bed.loop = true;
+
+  const bedLowpass = ctx.createBiquadFilter();
+  bedLowpass.type = 'lowpass';
+  bedLowpass.frequency.value = 480;
+
+  const bedGain = ctx.createGain();
+  bedGain.gain.value = 0.05;
+  bed.connect(bedLowpass).connect(bedGain).connect(master);
+
+  // --- Wave + bubble source noise ------------------------------------------
+  // One looped noise buffer feeds every wave; per-wave filters/gains shape each
+  // one so they never sound identical.
+  const waveBuffer = ctx.createBuffer(1, ctx.sampleRate * 5, ctx.sampleRate);
+  fillBrownNoise(waveBuffer, 6.5);
+  const waveSource = ctx.createBufferSource();
+  waveSource.buffer = waveBuffer;
+  waveSource.loop = true;
+  // DC-blocking high-pass: brown noise carries sub-bass/DC that, when a wave's
+  // gain envelope snaps shut, thumps audibly through the (DC-passing) lowpass.
+  // Strip everything below ~35 Hz so wave ends fade silently.
+  const waveDcBlock = ctx.createBiquadFilter();
+  waveDcBlock.type = 'highpass';
+  waveDcBlock.frequency.value = 35;
+  const waveBus = ctx.createGain();
+  waveBus.gain.value = 1;
+  waveSource.connect(waveDcBlock).connect(waveBus);
+
+  // Bubble bus: gentle lowpass so plinks sit underwater-soft, kept quiet.
+  const bubbleLowpass = ctx.createBiquadFilter();
+  bubbleLowpass.type = 'lowpass';
+  bubbleLowpass.frequency.value = 1400;
+  const bubbleBus = ctx.createGain();
+  bubbleBus.gain.value = 0.5;
+  bubbleLowpass.connect(bubbleBus).connect(master);
+
+  bed.start();
+  waveSource.start();
+
+  /**
+   * Schedules one breaking wave, panned somewhere in the stereo field.
+   * @param {number} now  ctx time to begin the swell
+   * @param {number} peak  peak gain of this wave (varies per wave)
+   * @param {number} length  total seconds from first swell to silence
+   */
+  function scheduleWave(now, peak, length) {
+    const crest = now + length * 0.42; // moment the wave breaks
+    const end = now + length;
+
+    const pan = ctx.createStereoPanner();
+    pan.pan.setValueAtTime(rand(-0.7, 0.7), now);
+    pan.connect(master);
+
+    // BODY: low/mid wash. Lowpass sweeps up toward the break, then dulls.
+    const bodyLp = ctx.createBiquadFilter();
+    bodyLp.type = 'lowpass';
+    bodyLp.frequency.setValueAtTime(350, now);
+    bodyLp.frequency.exponentialRampToValueAtTime(1500, crest);
+    bodyLp.frequency.exponentialRampToValueAtTime(420, end);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.0001, now);
+    bodyGain.gain.exponentialRampToValueAtTime(peak, crest);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, end);
+    waveBus.connect(bodyLp).connect(bodyGain).connect(pan);
+
+    // FIZZ: high foam hiss. Peaks just AFTER the break and lingers — this is
+    // the "sssss" of foam that outlasts the crash.
+    const fizzHp = ctx.createBiquadFilter();
+    fizzHp.type = 'highpass';
+    fizzHp.frequency.value = 1800;
+    const fizzGain = ctx.createGain();
+    const fizzPeakT = crest + length * 0.08;
+    fizzGain.gain.setValueAtTime(0.0001, now);
+    fizzGain.gain.exponentialRampToValueAtTime(peak * 0.5, fizzPeakT);
+    fizzGain.gain.exponentialRampToValueAtTime(0.0001, end + length * 0.1);
+    waveBus.connect(fizzHp).connect(fizzGain).connect(pan);
+
+    // CRACKLE: sparse foam bursts scattered through the recede. A highpassed
+    // tap whose gain gets short random spikes — the rice-krispie of wet sand.
+    const crackHp = ctx.createBiquadFilter();
+    crackHp.type = 'highpass';
+    crackHp.frequency.value = 3200;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.0001, now);
+    waveBus.connect(crackHp).connect(crackGain).connect(pan);
+    const bursts = 14 + Math.floor(Math.random() * 14);
+    for (let i = 0; i < bursts; i++) {
+      const t = rand(crest, end);
+      const amp = peak * rand(0.05, 0.22);
+      crackGain.gain.setValueAtTime(0.0001, t);
+      crackGain.gain.linearRampToValueAtTime(amp, t + 0.006);
+      crackGain.gain.exponentialRampToValueAtTime(0.0001, t + rand(0.03, 0.09));
+    }
+
+    // Tear down this wave's nodes once everything has receded.
+    later(() => {
+      try {
+        bodyGain.disconnect();
+        bodyLp.disconnect();
+        fizzGain.disconnect();
+        fizzHp.disconnect();
+        crackGain.disconnect();
+        crackHp.disconnect();
+        pan.disconnect();
+      } catch {
+        // already gone
+      }
+    }, (length * 1.2 + 0.5) * 1000);
+  }
+
+  /**
+   * Schedules one water bubble: a sine that snaps on and sweeps up in pitch
+   * over a few tens of ms, then decays — the classic "plink/bloop" of a bubble
+   * rising and popping. Pitch, level and position vary so no two are alike.
+   * @param {number} now  ctx time to fire
+   */
+  function scheduleBubble(now) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    const base = rand(260, 900);
+    osc.frequency.setValueAtTime(base, now);
+    osc.frequency.exponentialRampToValueAtTime(base * 2, now + 0.06);
+
+    const g = ctx.createGain();
+    const peak = rand(0.05, 0.1);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(peak, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+    const pan = ctx.createStereoPanner();
+    pan.pan.setValueAtTime(rand(-0.5, 0.5), now);
+
+    osc.connect(g).connect(pan).connect(bubbleLowpass);
+    osc.start(now);
+    osc.stop(now + 0.22);
+    osc.onended = () => {
+      try {
+        g.disconnect();
+        pan.disconnect();
+      } catch {
+        // already gone
+      }
+    };
+  }
+
+  // Schedule waves with irregular timing so the rhythm feels natural, not
+  // metronomic. Waves overlap a little (the next starts before the previous
+  // foam is gone), like a real shoreline. Occasional bigger "set" waves.
+  function loopWaves() {
+    if (stopped) return;
+    const big = Math.random() < 0.25;
+    const length = big ? rand(11, 14) : rand(7, 11);
+    const peak = big ? rand(0.16, 0.22) : rand(0.09, 0.15);
+    scheduleWave(ctx.currentTime + 0.05, peak, length);
+    const gap = length * rand(0.5, 0.78);
+    later(loopWaves, gap * 1000);
+  }
+  loopWaves();
+
+  // Bubbles arrive sporadically, sometimes alone and sometimes in a short
+  // cluster of 2–4 (a little stream rising), then a longer quiet gap. Sparse
+  // on purpose — an accent, not a texture.
+  function loopBubbles() {
+    if (stopped) return;
+    const cluster = 1 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < cluster; i++) {
+      scheduleBubble(ctx.currentTime + 0.05 + i * rand(0.05, 0.17));
+    }
+    later(loopBubbles, rand(2.5, 8.5) * 1000);
+  }
+  later(loopBubbles, 1500);
 
   return () => {
+    stopped = true;
+    for (const id of timers) clearTimeout(id);
+    timers.clear();
     try {
-      master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
-      source.stop(ctx.currentTime + 0.5);
-      lfo.stop(ctx.currentTime + 0.5);
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+      master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+      bed.stop(ctx.currentTime + 0.6);
+      waveSource.stop(ctx.currentTime + 0.6);
     } catch {
       // already stopped
     }
@@ -78,8 +341,8 @@ function startSeaSound(ctx) {
 /**
  * Full-screen underwater meditation scene: drifting caustic light, rising
  * bubbles, a breathing orb that guides a slow 4-4-6 breath, and an optional
- * synthesized sea-sound wash. Elapsed time counts UP (no countdown — CLAUDE.md
- * rule 6).
+ * synthesized soundscape of breaking waves. Elapsed time counts UP (no
+ * countdown — CLAUDE.md rule 6).
  */
 export default function MeditationScene() {
   const [phaseIndex, setPhaseIndex] = useState(0);
@@ -150,6 +413,63 @@ export default function MeditationScene() {
     []
   );
 
+  // A small school of fish drifting across at calm, varied speeds. Even-indexed
+  // fish swim left→right (facing right), odd ones the reverse, so the scene
+  // never feels like a one-way parade. Stable across renders.
+  const fish = useMemo(
+    () =>
+      Array.from({ length: 6 }, (_, i) => {
+        const rightward = i % 2 === 0;
+        return {
+          id: i,
+          emoji: i % 3 === 0 ? '🐠' : '🐟',
+          top: 18 + ((i * 23 + 9) % 60), // vertical lane, %
+          size: 22 + ((i * 11) % 18), // px
+          duration: 26 + ((i * 9) % 22), // 26–48s, unhurried
+          delay: (i * 6.5) % 24,
+          bob: ((i % 3) - 1) * 14, // px of vertical drift mid-swim
+          opacity: 0.45 + ((i * 17) % 30) / 100,
+          rightward,
+        };
+      }),
+    []
+  );
+
+  // Seaweed anchored along the seabed, each blade swaying on its own slow cycle.
+  const seaweed = useMemo(
+    () =>
+      Array.from({ length: 9 }, (_, i) => {
+        const height = 110 + ((i * 37) % 150); // px
+        const width = 16 + ((i * 5) % 14);
+        const curve = i % 2 === 0 ? 1 : -1; // which way the frond leans
+        // A tapered, S-curved leaf in a (width × height) box, base centred at
+        // the bottom and tip near the top — far more organic than a rectangle.
+        const cx = width / 2;
+        const lean = curve * width * 0.35;
+        const path = [
+          `M ${cx} ${height}`,
+          `C ${cx + curve * width * 0.5} ${height * 0.66},`,
+          `  ${cx + lean} ${height * 0.3},`,
+          `  ${cx + lean * 0.4} 2`,
+          `C ${cx + lean} ${height * 0.32},`,
+          `  ${cx - curve * width * 0.2} ${height * 0.68},`,
+          `  ${cx} ${height}`,
+          'Z',
+        ].join(' ');
+        return {
+          id: i,
+          left: Math.round((i * 37 + 4) % 96),
+          height,
+          width,
+          path,
+          duration: 7 + ((i * 7) % 7), // 7–13s sway
+          delay: (i * 1.3) % 6,
+          tilt: 4 + ((i * 3) % 6), // degrees of base sway
+        };
+      }),
+    []
+  );
+
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
 
@@ -174,6 +494,64 @@ export default function MeditationScene() {
           animation: 'caustics-drift 26s ease-in-out infinite reverse',
         }}
       />
+
+      {/* Seaweed swaying along the seabed */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0">
+        {seaweed.map((w) => (
+          <svg
+            key={w.id}
+            className="meditation-seaweed absolute bottom-0 origin-bottom"
+            width={w.width}
+            height={w.height}
+            viewBox={`0 0 ${w.width} ${w.height}`}
+            style={{
+              left: `${w.left}%`,
+              // @ts-ignore — CSS custom property
+              '--seaweed-tilt': `${w.tilt}deg`,
+              animation: `seaweed-sway ${w.duration}s ease-in-out ${w.delay}s infinite`,
+            }}
+          >
+            <defs>
+              <linearGradient id={`seaweed-grad-${w.id}`} x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor="rgb(6 78 59)" stopOpacity="0.8" />
+                <stop offset="55%" stopColor="rgb(15 118 110)" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="rgb(45 212 191)" stopOpacity="0.35" />
+              </linearGradient>
+            </defs>
+            <path d={w.path} fill={`url(#seaweed-grad-${w.id})`} />
+          </svg>
+        ))}
+      </div>
+
+      {/* Drifting fish */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        {fish.map((f) => (
+          <span
+            key={f.id}
+            className="meditation-fish absolute left-0 will-change-transform"
+            style={{
+              top: `${f.top}%`,
+              fontSize: `${f.size}px`,
+              // @ts-ignore — CSS custom properties
+              '--fish-bob': `${f.bob}px`,
+              '--fish-opacity': f.opacity,
+              // `reverse` plays the swim keyframe backwards (124vw → -12vw), so
+              // leftward fish actually travel right→left, not just face that way.
+              animation: `fish-swim ${f.duration}s linear ${f.delay}s infinite ${
+                f.rightward ? 'normal' : 'reverse'
+              }`,
+            }}
+          >
+            {/* 🐟/🐠 face left by default; flip only the rightward swimmers. */}
+            <span
+              className="inline-block"
+              style={{ transform: f.rightward ? 'scaleX(-1)' : 'none' }}
+            >
+              {f.emoji}
+            </span>
+          </span>
+        ))}
+      </div>
 
       {/* Rising bubbles */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
