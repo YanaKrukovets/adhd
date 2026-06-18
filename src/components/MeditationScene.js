@@ -90,9 +90,12 @@ function makeReverbImpulse(ctx, seconds = 2.6, decay = 2.2) {
  *   1. A quiet STEREO brown-noise bed (independent L/R) — the distant
  *      ocean/wind floor that surrounds the listener.
  *   2. Discrete WAVE EVENTS at irregular intervals, each panned somewhere in
- *      the field. A wave is itself three bands: a low BODY that swells and
- *      breaks, a high FIZZ that peaks just *after* the break and lingers (the
- *      sound of foam), and a sparse CRACKLE of foam bursts during the recede.
+ *      the field. A wave is itself two bands: a low BODY that swells and
+ *      breaks, and a high FIZZ that peaks just *after* the break and lingers
+ *      (the sound of foam). (A third CRACKLE band of short foam-burst spikes
+ *      was removed — its rapid retriggering could land two bursts close
+ *      enough together that the gain automation jumped instead of decaying,
+ *      producing an audible click that recurred on every wave.)
  *
  * Everything runs into a light convolution reverb for open-air space. The
  * soundscape is intentionally all broadband noise — no tonal/sine accents — so
@@ -159,7 +162,13 @@ function startSeaSound(ctx) {
 
   // --- Layer 1: the constant distant-ocean bed (stereo) --------------------
   // Two independent channels of brown noise so the floor is wide, not a point.
-  const bedBuffer = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
+  // Long and deliberately not a simple multiple of waveBuffer's length below —
+  // a short loop occasionally contains a random energy peak that, once looped,
+  // recurs at an exactly periodic interval and reads as a "bump" even though
+  // the seam itself is click-free. A long, coprime-ish length pushes any such
+  // recurrence far enough apart (and keeps the two loops from ever restarting
+  // in sync) that it stops being perceptible as periodic.
+  const bedBuffer = ctx.createBuffer(2, ctx.sampleRate * 23, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) fillBrownNoise2(bedBuffer, ch, 3.5);
   const bed = ctx.createBufferSource();
   bed.buffer = bedBuffer;
@@ -181,8 +190,14 @@ function startSeaSound(ctx) {
   // --- Wave + bubble source noise ------------------------------------------
   // One looped noise buffer feeds every wave; per-wave filters/gains shape each
   // one so they never sound identical.
-  const waveBuffer = ctx.createBuffer(1, ctx.sampleRate * 5, ctx.sampleRate);
-  fillBrownNoise(waveBuffer, 6.5);
+  // 29s, not a multiple of bedBuffer's 23s — see comment on bedBuffer above.
+  const waveBuffer = ctx.createBuffer(1, ctx.sampleRate * 29, ctx.sampleRate);
+  // Gain kept low enough that the random-walk noise never approaches ±1 and
+  // clips (a previous gain of 6.5 let occasional excursions hard-clip, which
+  // is the actual source of the "crackle" — heard periodically because it's
+  // baked into this looped buffer). Loudness is made up downstream on
+  // waveBus instead, after the per-wave envelopes/filters have shaped it.
+  fillBrownNoise(waveBuffer, 3.2);
   const waveSource = ctx.createBufferSource();
   waveSource.buffer = waveBuffer;
   waveSource.loop = true;
@@ -193,7 +208,10 @@ function startSeaSound(ctx) {
   waveDcBlock.type = 'highpass';
   waveDcBlock.frequency.value = 35;
   const waveBus = ctx.createGain();
-  waveBus.gain.value = 1;
+  // Compensates the lowered source gain above (6.5 → 3.2) so overall wave
+  // loudness is unchanged; safe to boost here since it's after the DC-block
+  // and ahead of further per-wave filtering, not the raw unfiltered buffer.
+  waveBus.gain.value = 2;
   waveSource.connect(waveDcBlock).connect(waveBus);
 
   bed.start();
@@ -220,6 +238,12 @@ function startSeaSound(ctx) {
     bodyLp.frequency.exponentialRampToValueAtTime(1500, crest);
     bodyLp.frequency.exponentialRampToValueAtTime(420, end);
     const bodyGain = ctx.createGain();
+    // GainNode defaults to 1.0 (full volume), not 0 — setting .value directly
+    // here (not just scheduling setValueAtTime for later) matters because the
+    // node is connected and already passing audio at that default value for
+    // the gap between creation and `now`. Without this, every wave opened
+    // with a brief full-volume burst of noise: the periodic crackle/bump.
+    bodyGain.gain.value = 0.0001;
     bodyGain.gain.setValueAtTime(0.0001, now);
     bodyGain.gain.exponentialRampToValueAtTime(peak, crest);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, end);
@@ -232,27 +256,11 @@ function startSeaSound(ctx) {
     fizzHp.frequency.value = 1800;
     const fizzGain = ctx.createGain();
     const fizzPeakT = crest + length * 0.08;
+    fizzGain.gain.value = 0.0001; // see bodyGain comment above
     fizzGain.gain.setValueAtTime(0.0001, now);
     fizzGain.gain.exponentialRampToValueAtTime(peak * 0.5, fizzPeakT);
     fizzGain.gain.exponentialRampToValueAtTime(0.0001, end + length * 0.1);
     waveBus.connect(fizzHp).connect(fizzGain).connect(pan);
-
-    // CRACKLE: sparse foam bursts scattered through the recede. A highpassed
-    // tap whose gain gets short random spikes — the rice-krispie of wet sand.
-    const crackHp = ctx.createBiquadFilter();
-    crackHp.type = 'highpass';
-    crackHp.frequency.value = 3200;
-    const crackGain = ctx.createGain();
-    crackGain.gain.setValueAtTime(0.0001, now);
-    waveBus.connect(crackHp).connect(crackGain).connect(pan);
-    const bursts = 14 + Math.floor(Math.random() * 14);
-    for (let i = 0; i < bursts; i++) {
-      const t = rand(crest, end);
-      const amp = peak * rand(0.05, 0.22);
-      crackGain.gain.setValueAtTime(0.0001, t);
-      crackGain.gain.linearRampToValueAtTime(amp, t + 0.006);
-      crackGain.gain.exponentialRampToValueAtTime(0.0001, t + rand(0.03, 0.09));
-    }
 
     // Tear down this wave's nodes once everything has receded.
     later(() => {
@@ -261,8 +269,6 @@ function startSeaSound(ctx) {
         bodyLp.disconnect();
         fizzGain.disconnect();
         fizzHp.disconnect();
-        crackGain.disconnect();
-        crackHp.disconnect();
         pan.disconnect();
       } catch {
         // already gone
@@ -302,6 +308,49 @@ function startSeaSound(ctx) {
 }
 
 /**
+ * Internal render resolution as a fraction of the canvas's CSS size. Caustic
+ * light is inherently soft/blurry, so rendering at quarter-res and letting
+ * the browser upscale costs a fraction of the fill-rate while looking the
+ * same — and unlike the DOM version (two full-screen `mix-blend-soft-light`
+ * layers), this never asks the compositor to re-blend the whole viewport.
+ */
+const CAUSTICS_SCALE = 0.5;
+
+/**
+ * Paints one slow-drifting caustic light sheet using an additive radial
+ * gradient. Two of these overlaid (different period/phase/color) read as
+ * shifting underwater light, replacing what used to be two full-screen
+ * `mix-blend-soft-light` divs — that blend mode forces the browser to
+ * re-composite the entire viewport every frame, which is the likely cause of
+ * the animation reading smooth only while DevTools is open (it changes the
+ * compositing path) and of the slow first paint on arrival. A canvas's cost
+ * is bounded by its own pixels, not the page, so it stays smooth either way
+ * and paints on the very first frame.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width   canvas pixel width (already includes CAUSTICS_SCALE)
+ * @param {number} height  canvas pixel height
+ * @param {number} t       seconds elapsed
+ * @param {0 | 1} index    picks period/phase/color so the two sheets differ
+ */
+function drawCausticSheet(ctx, width, height, t, index) {
+  const period = index === 0 ? 18 : 26;
+  const dir = index === 0 ? 1 : -1;
+  const angle = (dir * t * 2 * Math.PI) / period;
+  const cx = width * (0.5 + 0.24 * Math.cos(angle));
+  const cy = height * (0.5 + 0.24 * Math.sin(angle * 0.8));
+  const radius = Math.max(width, height) * (index === 0 ? 0.5 : 0.42);
+  const color = index === 0 ? '255,255,255' : '173,255,247';
+  const alpha = 0.22 + 0.1 * Math.sin(angle * 1.3);
+
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(${color},${alpha})`);
+  grad.addColorStop(1, `rgba(${color},0)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+}
+
+/**
  * Full-screen underwater meditation scene: drifting caustic light, rising
  * bubbles, a breathing orb that guides a slow 4-4-6 breath, and an optional
  * synthesized soundscape of breaking waves. Elapsed time counts UP (no
@@ -314,8 +363,57 @@ export default function MeditationScene() {
 
   const audioCtxRef = useRef(/** @type {AudioContext|null} */ (null));
   const stopSoundRef = useRef(/** @type {(() => void)|null} */ (null));
+  const causticsCanvasRef = useRef(/** @type {HTMLCanvasElement|null} */ (null));
 
   const phase = BREATH_PHASES[phaseIndex];
+
+  // Drive the caustic light canvas with requestAnimationFrame instead of a
+  // CSS animation. It paints on the very first frame (no waiting on the rest
+  // of the page's layout/paint) and its cost is bounded by the canvas's own
+  // pixels rather than the whole viewport, so it stays smooth regardless of
+  // what else is happening on the compositor.
+  useEffect(() => {
+    const canvas = causticsCanvasRef.current;
+    if (!canvas) return undefined;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let width = 0;
+    let height = 0;
+
+    function resize() {
+      width = Math.round(canvas.clientWidth * CAUSTICS_SCALE);
+      height = Math.round(canvas.clientHeight * CAUSTICS_SCALE);
+      canvas.width = width;
+      canvas.height = height;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function paint(t) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'lighter';
+      drawCausticSheet(ctx, width, height, t, 0);
+      drawCausticSheet(ctx, width, height, t, 1);
+    }
+
+    if (reduceMotion) {
+      paint(0);
+      return () => window.removeEventListener('resize', resize);
+    }
+
+    const start = performance.now();
+    let raf = requestAnimationFrame(function tick(now) {
+      paint((now - start) / 1000);
+      raf = requestAnimationFrame(tick);
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
 
   // Advance the breathing cycle, each phase lasting its own duration.
   useEffect(() => {
@@ -444,24 +542,11 @@ export default function MeditationScene() {
   const seaLife = useMemo(
     () => (
       <>
-        {/* Caustic light sheets */}
-        <div
+        {/* Caustic light sheets — canvas-driven, see the effect above */}
+        <canvas
+          ref={causticsCanvasRef}
           aria-hidden="true"
-          className="meditation-caustics pointer-events-none absolute -inset-1/4 mix-blend-soft-light"
-          style={{
-            background:
-              'radial-gradient(40% 30% at 30% 20%, rgba(255,255,255,0.5), transparent 60%), radial-gradient(35% 25% at 70% 35%, rgba(173,255,247,0.45), transparent 60%)',
-            animation: 'caustics-drift 18s ease-in-out infinite',
-          }}
-        />
-        <div
-          aria-hidden="true"
-          className="meditation-caustics pointer-events-none absolute -inset-1/4 mix-blend-soft-light"
-          style={{
-            background:
-              'radial-gradient(45% 30% at 60% 70%, rgba(255,255,255,0.4), transparent 60%), radial-gradient(30% 20% at 25% 60%, rgba(125,211,252,0.4), transparent 60%)',
-            animation: 'caustics-drift 26s ease-in-out infinite reverse',
-          }}
+          className="pointer-events-none absolute inset-0 h-full w-full"
         />
 
         {/* Seaweed swaying along the seabed */}
