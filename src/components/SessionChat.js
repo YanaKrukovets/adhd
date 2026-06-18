@@ -31,8 +31,9 @@ function findToolOutput(message, toolName) {
  * @param {string} props.sessionId
  * @param {string} props.taskTitle
  * @param {string} props.firstAction
+ * @param {Array<any>} [props.initialMessages] persisted transcript to rehydrate on reload
  */
-export default function SessionChat({ sessionId, taskTitle, firstAction }) {
+export default function SessionChat({ sessionId, taskTitle, firstAction, initialMessages = [] }) {
   const bottomRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const checkinTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null));
   const sessionStartedRef = useRef(false);
@@ -41,16 +42,20 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
 
   const { messages, sendMessage, status, error } = useChat({
     id: sessionId,
+    messages: initialMessages,
     transport: new DefaultChatTransport({ api: `/api/session/${sessionId}` }),
     onError: (err) => console.error('[session chat]', err),
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  // Trigger initial agent greeting once on mount
+  // Trigger initial agent greeting once on mount — but only for a genuinely
+  // fresh session. When we rehydrated a transcript on reload, the conversation
+  // is already underway, so re-greeting would duplicate the opener.
   useEffect(() => {
     if (sessionStartedRef.current) return;
     sessionStartedRef.current = true;
+    if (initialMessages.length > 0) return;
     sendMessage({ text: `[session:start] task="${taskTitle}" first_action="${firstAction}"` });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

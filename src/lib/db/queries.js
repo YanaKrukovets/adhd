@@ -198,6 +198,35 @@ export async function getSessionEvents(sessionId) {
     .orderBy(sessionEvents.createdAt);
 }
 
+/**
+ * Conversation transcript for rehydrating the chat UI on reload: only the
+ * user_message / agent_message events, in chronological order. Synthetic
+ * `[session:*]` prompts are never persisted as user_message rows, so they're
+ * naturally excluded.
+ * @param {string} sessionId
+ * @returns {Promise<Array<{ id: string, role: 'user' | 'assistant', content: string }>>}
+ */
+export async function getSessionMessages(sessionId) {
+  const rows = await db.select({
+    id: sessionEvents.id,
+    role: sessionEvents.role,
+    content: sessionEvents.content,
+  }).from(sessionEvents)
+    .where(and(
+      eq(sessionEvents.sessionId, sessionId),
+      sql`${sessionEvents.eventType} IN ('user_message', 'agent_message')`
+    ))
+    .orderBy(sessionEvents.createdAt);
+
+  return rows
+    .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content)
+    .map((r) => ({
+      id: r.id,
+      role: /** @type {'user' | 'assistant'} */ (r.role),
+      content: /** @type {string} */ (r.content),
+    }));
+}
+
 // ---- Agent Calls ----
 
 /**
