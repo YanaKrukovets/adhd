@@ -29,7 +29,7 @@ export default function AboutPage() {
           begin. So this isn&apos;t another task manager. Everything here is built around one
           question: <em>will this help you start something in the next five minutes?</em>
         </p>
-        <p>It does that in two ways:</p>
+        <p>It does that in a few ways:</p>
         <ul className="list-disc space-y-3 pl-6">
           <li>
             <strong className="font-medium text-stone-900">It turns a vague intention into a tiny first step.</strong>{' '}
@@ -40,6 +40,17 @@ export default function AboutPage() {
             <strong className="font-medium text-stone-900">It sits with you while you work.</strong>{' '}
             Like a calm friend in the room — a body double. It checks in gently, helps break things
             down when they feel too big, and goes quiet when you&apos;re in flow.
+          </li>
+          <li>
+            <strong className="font-medium text-stone-900">It helps you settle before you start.</strong>{' '}
+            A meditation assistant for when your head is too loud to begin — short, guided pauses to
+            slow down, breathe, and clear enough space to take the first step.
+          </li>
+          <li>
+            <strong className="font-medium text-stone-900">It listens when the block is in your head, not your list.</strong>{' '}
+            A psychologist-style assistant for the harder moments — when starting is tangled up with
+            overwhelm, avoidance, or shame. It talks things through with you, gently, without
+            judgement. It&apos;s support, not a replacement for real therapy.
           </li>
         </ul>
 

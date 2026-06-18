@@ -60,7 +60,17 @@ export default function HowItWorksPage() {
           <em>&ldquo;leave me to it&rdquo;</em> and it goes quiet. Say{' '}
           <em>&ldquo;I&apos;m stuck waiting on X&rdquo;</em> and it logs it and moves on.
         </Step>
-        <Step n={7} title="Say 'done' when you're done">
+        <Step n={7} title="Settle first if your head is too loud">
+          If you can&apos;t even think about starting, ask for the meditation assistant. It walks you
+          through a short, guided pause — slow down, breathe, and make a little space — so the first
+          step feels reachable again.
+        </Step>
+        <Step n={8} title="Talk it through when the block is in your head">
+          Sometimes the wall isn&apos;t the task, it&apos;s the overwhelm or shame around it. Ask for
+          the psychologist assistant and it&apos;ll talk things through with you, gently and without
+          judgement. It&apos;s support to help you start — not a replacement for real therapy.
+        </Step>
+        <Step n={9} title="Say 'done' when you're done">
           No need to invent next steps. It&apos;ll wrap up the session and leave you one small thing
           to start with tomorrow.
         </Step>
