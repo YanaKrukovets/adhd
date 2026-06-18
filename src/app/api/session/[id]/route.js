@@ -78,7 +78,10 @@ export async function POST(request, { params }) {
   }
 
   const task = workSession.taskId ? await getTaskById(workSession.taskId) : null;
-  const messages = convertToModelMessages(uiMessages);
+  // convertToModelMessages is async in ai v6 — must be awaited, otherwise a
+  // Promise is passed to streamText and it throws "messages.some is not a
+  // function" when validating the message list.
+  const messages = await convertToModelMessages(uiMessages);
 
   const result = runSessionAgent({
     sessionId,
@@ -101,16 +104,7 @@ export async function POST(request, { params }) {
         causeName: e?.lastError?.name ?? e?.cause?.name,
         causeMessage: e?.lastError?.message ?? e?.cause?.message,
       });
-      const friendly = friendlyStreamError(error);
-      // TEMP DIAGNOSTIC: when the error wasn't specifically classified, append a
-      // safe signature (error class + status, no secrets) so the cause is
-      // visible in the UI for users who can't read Vercel logs. Remove once the
-      // production failure is identified.
-      const cause = e?.lastError ?? e?.cause ?? e;
-      const sig = `${cause?.name ?? e?.name ?? 'Error'}${
-        cause?.statusCode ?? cause?.status ?? e?.statusCode ? `/${cause?.statusCode ?? cause?.status ?? e?.statusCode}` : ''
-      }`;
-      return friendly.startsWith("Couldn't reach") ? `${friendly} (ref: ${sig})` : friendly;
+      return friendlyStreamError(error);
     },
   });
 }
