@@ -21,7 +21,7 @@ import {
 } from '../db/queries.js';
 
 export const SESSION_MODEL = 'gemini-3.1-flash-lite';
-export const SESSION_PROMPT_VERSION = '1.3.0';
+export const SESSION_PROMPT_VERSION = '1.4.0';
 
 /**
  * Runs the session agent and returns a streamText result ready for toUIMessageStreamResponse().

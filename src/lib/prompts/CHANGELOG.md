@@ -49,6 +49,24 @@ Eval baseline scores (planner suite, 5 placeholder fixtures):
 
 ## session-agent.md
 
+### v1.4.0 — 2026-06-18 (pin the "done" → close-out behavior with an example)
+Fix for a bug still seen in prod on v1.3.0: a single-step task ("Identify the download button"), user typed "done" in chat, agent replied **"Got it. What's next?"** instead of offering to close out — then only reached the wrap-up question after a *second* "done". v1.3.0 already made "finished" the default in prose, but the running model (`gemini-3.1-flash-lite`) fumbles the conditional ("is there a prior `split_task` sub-step?") and falls back to "what's next?".
+
+Change: added an explicit negative rule (never reply "What's next?" to a "done" signal) plus a pinned wrong/right few-shot example using the exact failing phrase. No change to the underlying logic — only making the existing v1.3.0 intent unmissable for a weak lite model. The deterministic "This task is done" *button* path (commit 3802bb0) was already fixed; this targets the free-text chat path.
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (key/quota-blocked) | — (key/quota-blocked) |
+| tone_shame_free | — (key/quota-blocked) | — (key/quota-blocked) |
+| correct_tool_selection | — (key/quota-blocked) | — (key/quota-blocked) |
+
+⚠️ Evals NOT run: `GOOGLE_GENERATIVE_AI_API_KEY` is unset in this environment (`npm run evals:session` errors out before any call). Same gap as v1.2.0/v1.3.0. Re-run and backfill once a key/billing is available. Note: the current session suite has **no scenario** covering "single done → close out" — add one (s006) so this regression is caught automatically.
+
+Hypothesis: lite models follow concrete few-shot examples far more reliably than multi-condition prose rules. Pinning the exact wrong phrase ("Got it. What's next?") to a correct rewrite removes the model's room to default into the loop.
+
+---
+
 ### v1.3.0 — 2026-06-17 (default "done" to finished)
 Fix for v1.2.0, which still looped on plain "done". v1.2.0 told the agent a short "done" means *step*-done and to keep asking "what's next?" — exactly the loop we were trying to kill. Reported still-broken by the user in testing.
 
