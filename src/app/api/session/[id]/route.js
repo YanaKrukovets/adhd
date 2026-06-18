@@ -6,6 +6,11 @@ import { getWorkSession, getTaskById, appendSessionEvent } from '@/lib/db/querie
 import { runSessionAgent } from '@/lib/agents/session.js';
 import { randomUUID } from 'crypto';
 
+// postgres-js (auth + DB queries) requires the Node.js runtime, and the
+// streamed agent response needs headroom beyond the default function timeout.
+export const runtime = 'nodejs';
+export const maxDuration = 30;
+
 /**
  * Extracts the concatenated text content from a UIMessage's parts.
  *
@@ -84,6 +89,11 @@ export async function POST(request, { params }) {
   });
 
   return result.toUIMessageStreamResponse({
-    onError: () => "Couldn't reach the assistant just now — give it another moment and try again.",
+    onError: (error) => {
+      // Surface the real cause in server logs — without this the failure is
+      // invisible in production (Vercel) and only the generic copy is seen.
+      console.error('[session] stream error:', error);
+      return "Couldn't reach the assistant just now — give it another moment and try again.";
+    },
   });
 }
