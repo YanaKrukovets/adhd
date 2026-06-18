@@ -27,3 +27,58 @@ body {
     cursor: pointer;
   }
 }
+
+/* ---- Meditation scene (underwater) ---- */
+
+/* Bubbles drift upward and gently sway as they rise. */
+@keyframes bubble-rise {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-92vh) translateX(var(--bubble-drift, 12px));
+    opacity: 0;
+  }
+}
+
+/* Slow caustic light sheets shifting across the water. */
+@keyframes caustics-drift {
+  0% {
+    transform: translate3d(-6%, -4%, 0) scale(1.2) rotate(0deg);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.35) rotate(8deg);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(-6%, -4%, 0) scale(1.2) rotate(0deg);
+    opacity: 0.35;
+  }
+}
+
+/* Soft halo pulse around the breathing orb. */
+@keyframes orb-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meditation-bubble,
+  .meditation-caustics,
+  .meditation-orb-glow {
+    animation: none !important;
+  }
+}

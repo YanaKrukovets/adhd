@@ -18,6 +18,11 @@ export const StartSessionSchema = z.object({
   taskId: z.string().min(1),
 });
 
+// POST /api/tasks/refill response — how many pending tasks were pulled onto today.
+export const RefillResponseSchema = z.object({
+  moved: z.number().int().min(0),
+});
+
 export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),
