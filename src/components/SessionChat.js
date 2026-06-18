@@ -100,6 +100,14 @@ export default function SessionChat({ sessionId, taskTitle, firstAction, initial
     .map((m) => findToolOutput(m, 'end_session'))
     .find(Boolean);
 
+  // Surface a failed state write. If the task couldn't be updated (e.g. no task
+  // bound to the session), the agent's reply alone would look like success
+  // while the task quietly stays in today's list — so flag it plainly.
+  const stateUpdateFailed = messages
+    .filter((m) => m.role === 'assistant')
+    .map((m) => findToolOutput(m, 'update_task_state'))
+    .some((out) => out && out.ok === false);
+
   const visibleMessages = messages.filter((m) => !(m.role === 'user' && getMessageText(m).startsWith('[session:')));
 
   if (endResult) {
@@ -155,6 +163,12 @@ export default function SessionChat({ sessionId, taskTitle, firstAction, initial
       {error && (
         <div role="alert" className="self-start max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error.message || "Couldn't reach the assistant just now — give it another moment and try again."}
+        </div>
+      )}
+
+      {stateUpdateFailed && (
+        <div role="alert" className="self-start max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          We couldn&apos;t save that change just now, so this task may still show up under today. Try again in a moment.
         </div>
       )}
 

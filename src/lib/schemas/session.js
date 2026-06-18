@@ -8,7 +8,9 @@ export const TaskStateSchema = z.enum(['pending', 'today', 'in_progress', 'done'
 export const SessionTaskStateSchema = z.enum(['started', 'done', 'stuck', 'deferred']);
 
 export const UpdateTaskStateInputSchema = z.object({
-  taskId: z.string().min(1),
+  // Optional: the server overrides this with the session-bound task ID. The
+  // agent only knows the task title, so any ID it supplies is a guess.
+  taskId: z.string().min(1).optional(),
   state: SessionTaskStateSchema,
 });
 
@@ -28,7 +30,8 @@ export const SetCheckinTimerInputSchema = z.object({
 });
 
 export const LogBlockerInputSchema = z.object({
-  taskId: z.string().min(1),
+  // Optional: the server overrides this with the session-bound task ID.
+  taskId: z.string().min(1).optional(),
   note: z.string().min(1).max(500),
 });
 

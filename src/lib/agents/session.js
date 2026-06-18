@@ -29,13 +29,14 @@ export const SESSION_PROMPT_VERSION = '1.3.0';
  * @param {object} params
  * @param {string} params.sessionId
  * @param {string} params.userId
+ * @param {string|null} [params.taskId] authoritative task bound to this session
  * @param {string} params.taskTitle
  * @param {string} params.firstAction
  * @param {Date} params.startedAt
  * @param {Array<import('ai').ModelMessage>} params.messages
  * @returns {ReturnType<typeof streamText>}
  */
-export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, startedAt, messages }) {
+export function runSessionAgent({ sessionId, userId, taskId: sessionTaskId, taskTitle, firstAction, startedAt, messages }) {
   const systemPrompt = loadPrompt('session-agent', {
     task_title: taskTitle,
     first_action: firstAction,
@@ -64,6 +65,11 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
         description: 'Update the state of the current task.',
         inputSchema: UpdateTaskStateInputSchema,
         execute: async ({ taskId, state }) => {
+          // Trust the session-bound task ID, not the model. The agent never
+          // sees the real task ID (only the title), so any taskId it supplies
+          // is a guess that matches no row — leaving the task stuck as "today".
+          const targetId = sessionTaskId ?? taskId;
+          if (!targetId) return { ok: false, state, error: 'no task bound to session' };
           /** @type {Partial<import('../db/schema.js').tasks.$inferInsert>} */
           const updates = {};
           if (state === 'started') {
@@ -78,7 +84,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
           }
           // 'stuck' keeps DB state as-is; agent should follow up with split_task or log_blocker
           if (Object.keys(updates).length > 0) {
-            await updateTask(taskId, userId, updates);
+            await updateTask(targetId, userId, updates);
           }
           return { ok: true, state };
         },
@@ -127,6 +133,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
         description: 'Log a blocker without derailing the session flow.',
         inputSchema: LogBlockerInputSchema,
         execute: async ({ taskId, note }) => {
+          const targetId = sessionTaskId ?? taskId;
           await appendSessionEvent({
             id: randomUUID(),
             sessionId,
@@ -134,7 +141,7 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
             role: null,
             content: null,
             toolName: 'log_blocker',
-            toolInput: { taskId, note },
+            toolInput: { taskId: targetId, note },
             toolResult: { logged: true },
           });
           return { ok: true };

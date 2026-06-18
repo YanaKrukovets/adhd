@@ -86,6 +86,7 @@ export async function POST(request, { params }) {
   const result = runSessionAgent({
     sessionId,
     userId,
+    taskId: workSession.taskId,
     taskTitle: task?.title ?? 'your task',
     firstAction: task?.firstAction ?? '',
     startedAt: workSession.startedAt,
