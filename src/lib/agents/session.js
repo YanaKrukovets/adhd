@@ -21,7 +21,7 @@ import {
 } from '../db/queries.js';
 
 export const SESSION_MODEL = 'gemini-3.1-flash-lite';
-export const SESSION_PROMPT_VERSION = '1.4.0';
+export const SESSION_PROMPT_VERSION = '1.5.0';
 
 /**
  * Runs the session agent and returns a streamText result ready for toUIMessageStreamResponse().
@@ -151,7 +151,18 @@ export function runSessionAgent({ sessionId, userId, taskId: sessionTaskId, task
       end_session: tool({
         description: 'End the session with a factual summary and a concrete tomorrow first action.',
         inputSchema: EndSessionInputSchema,
-        execute: async ({ summary, tomorrow_first_action }) => {
+        execute: async ({ summary, tomorrow_first_action, task_completed }) => {
+          // If we're wrapping up because the task is finished, mark it done here
+          // deterministically. This is the safety net for the chat wrap-up path:
+          // a flaky/timed-out model may never fire update_task_state(done), which
+          // would leave the task isToday=true and reappearing under today.
+          if (task_completed && sessionTaskId) {
+            await updateTask(sessionTaskId, userId, {
+              state: 'done',
+              isToday: false,
+              completedAt: new Date(),
+            });
+          }
           await updateWorkSession(sessionId, userId, {
             state: 'ended',
             summary,

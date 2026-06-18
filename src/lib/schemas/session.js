@@ -38,6 +38,11 @@ export const LogBlockerInputSchema = z.object({
 export const EndSessionInputSchema = z.object({
   summary: z.string().min(1).max(1000),
   tomorrow_first_action: z.string().min(1).max(120),
+  // True only when wrapping up because the task is finished. Marks the bound
+  // task done deterministically so it leaves today's list — instead of relying
+  // on a separate update_task_state call the model may skip. Leave false/absent
+  // when the user is just stopping for now (work rolls forward silently).
+  task_completed: z.boolean().optional().default(false),
 });
 
 export const EnterFlowModeInputSchema = z.object({

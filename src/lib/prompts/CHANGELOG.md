@@ -49,6 +49,24 @@ Eval baseline scores (planner suite, 5 placeholder fixtures):
 
 ## session-agent.md
 
+### v1.5.0 — 2026-06-18 (complete the task atomically on wrap-up)
+Bug: after a chat wrap-up the finished task still reappeared under Today. `end_session` only ended the *session* — it never marked the *task* done. Completion rode on the model also firing `update_task_state(done)`, which the lite model/free-tier often skips, leaving `isToday=true`.
+
+Change (paired with a code change): `end_session` now takes a `task_completed` flag. The prompt now tells the agent to wrap up a *finished* task with a single `end_session(task_completed: true)` call — the tool marks the bound task done deterministically (state=done, isToday=false, completedAt). For "stopping for now" the flag stays false and work rolls forward silently (no false "done"). Removed the now-redundant two-step "update_task_state(done) then end_session".
+
+Eval scores (session suite):
+| Dimension | Before | After |
+|---|---|---|
+| interruption_appropriateness | — (key/quota-blocked) | — (key/quota-blocked) |
+| tone_shame_free | — (key/quota-blocked) | — (key/quota-blocked) |
+| correct_tool_selection | — (key/quota-blocked) | — (key/quota-blocked) |
+
+⚠️ Evals NOT run: `GOOGLE_GENERATIVE_AI_API_KEY` unset (same gap as v1.2.0–v1.4.0). The harness also still judges stub strings, not the real agent — wire it to `runSessionAgent` before these scores mean anything.
+
+Hypothesis: collapsing completion into one tool call removes the failure window where the model ends the session but forgets to mark the task done. Deterministic DB write inside the tool, not a second model decision.
+
+---
+
 ### v1.4.0 — 2026-06-18 (pin the "done" → close-out behavior with an example)
 Fix for a bug still seen in prod on v1.3.0: a single-step task ("Identify the download button"), user typed "done" in chat, agent replied **"Got it. What's next?"** instead of offering to close out — then only reached the wrap-up question after a *second* "done". v1.3.0 already made "finished" the default in prose, but the running model (`gemini-3.1-flash-lite`) fumbles the conditional ("is there a prior `split_task` sub-step?") and falls back to "what's next?".
 
