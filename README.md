@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Model & cost projections
+
+All agents (session + planner) run on **`gemini-3.1-flash-lite`** via `@ai-sdk/google`,
+set per agent in `src/lib/agents/{session,planner}.js`. It was chosen as the
+cheapest current text model with the most generous free quota.
+
+- **Free tier:** $0 within quota, but daily request caps apply (~tens of
+  requests/day). Not sufficient for real usage — see the per-model limits at
+  [ai.dev/rate-limit](https://ai.dev/rate-limit). The session agent caps tool
+  loops at 3 steps to conserve the free budget.
+- **Paid tier:** `gemini-3.1-flash-lite` is fractions of a cent per session
+  (a few thousand tokens in/out). Enable billing on the Google project for
+  usable limits. Update `MODEL_COSTS` in `src/lib/telemetry.js` if you move off
+  the free tier so `agent_calls.cost_usd` stays accurate.

@@ -20,7 +20,7 @@ import {
   logAgentCall,
 } from '../db/queries.js';
 
-export const SESSION_MODEL = 'gemini-2.5-flash';
+export const SESSION_MODEL = 'gemini-3.1-flash-lite';
 export const SESSION_PROMPT_VERSION = '1.1.0';
 
 /**

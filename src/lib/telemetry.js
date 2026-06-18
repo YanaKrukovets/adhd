@@ -9,6 +9,7 @@ import { logAgentCall } from './db/queries.js';
  * @type {Record<string, {input: number, output: number}>}
  */
 const MODEL_COSTS = {
+  'gemini-3.1-flash-lite': { input: 0, output: 0 },
   'gemini-2.5-flash':      { input: 0, output: 0 },
   'gemini-2.5-flash-lite': { input: 0, output: 0 },
   'gemini-2.0-flash':      { input: 0, output: 0 },

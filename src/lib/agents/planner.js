@@ -5,7 +5,7 @@ import { PlanSchema } from '../schemas/plan.js';
 import { loadPrompt } from '../prompts/load.js';
 import { withTelemetry } from '../telemetry.js';
 
-const PLANNER_MODEL = 'gemini-2.5-flash';
+const PLANNER_MODEL = 'gemini-3.1-flash-lite';
 export const PLANNER_PROMPT_VERSION = '1.1.0';
 
 /**
