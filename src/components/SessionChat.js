@@ -39,7 +39,7 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
   const sessionEndedRef = useRef(false);
   const [input, setInput] = useState('');
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, error } = useChat({
     id: sessionId,
     transport: new DefaultChatTransport({ api: `/api/session/${sessionId}` }),
     onError: (err) => console.error('[session chat]', err),
@@ -144,6 +144,14 @@ export default function SessionChat({ sessionId, taskTitle, firstAction }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Surface assistant errors (e.g. free-tier usage limit) plainly so the
+          user knows what happened, not just the console. */}
+      {error && (
+        <div role="alert" className="self-start max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error.message || "Couldn't reach the assistant just now — give it another moment and try again."}
+        </div>
+      )}
 
       {/* Input */}
       <form

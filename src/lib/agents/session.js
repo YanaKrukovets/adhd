@@ -48,7 +48,10 @@ export function runSessionAgent({ sessionId, userId, taskTitle, firstAction, sta
     model: google(SESSION_MODEL),
     system: systemPrompt,
     messages,
-    stopWhen: stepCountIs(5),
+    // Each step is a separate model call. Free-tier Gemini 2.5 Flash allows
+    // only ~20 requests/day, so capping at 3 steps (vs 5) stretches the daily
+    // budget. Raise this back once the project is on the paid tier.
+    stopWhen: stepCountIs(3),
     // Gemini's free tier frequently returns 429 (quota) / 503 (overload). The
     // SDK retries with exponential backoff, which can run past Vercel's 25s
     // initial-response limit and get the function silently killed. Cap retries

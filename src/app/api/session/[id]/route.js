@@ -4,6 +4,7 @@ import { convertToModelMessages } from 'ai';
 import { auth } from '@/lib/auth.js';
 import { getWorkSession, getTaskById, appendSessionEvent } from '@/lib/db/queries.js';
 import { runSessionAgent } from '@/lib/agents/session.js';
+import { friendlyStreamError } from '@/lib/session-error.js';
 import { randomUUID } from 'crypto';
 
 // postgres-js (auth + DB queries) requires the Node.js runtime, and the
@@ -93,7 +94,7 @@ export async function POST(request, { params }) {
       // Surface the real cause in server logs — without this the failure is
       // invisible in production (Vercel) and only the generic copy is seen.
       console.error('[session] stream error:', error);
-      return "Couldn't reach the assistant just now — give it another moment and try again.";
+      return friendlyStreamError(error);
     },
   });
 }
