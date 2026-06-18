@@ -1,6 +1,6 @@
 // @ts-check
 import { auth } from '@/lib/auth.js';
-import { getTodayTasks } from '@/lib/db/queries.js';
+import { getTodayTasks, getQueuedTaskCount } from '@/lib/db/queries.js';
 import TaskCard from './TaskCard.js';
 
 const ENERGY_RANK = { low: 0, medium: 1, high: 2 };
@@ -16,11 +16,22 @@ export default async function TodayTaskList({ energy = 'medium' }) {
   if (!session?.user?.id) return null;
 
   let tasks = [];
+  let queuedCount = 0;
   try {
-    tasks = await getTodayTasks(session.user.id);
+    [tasks, queuedCount] = await Promise.all([
+      getTodayTasks(session.user.id),
+      getQueuedTaskCount(session.user.id),
+    ]);
   } catch {
     // DB unavailable in dev without env
   }
+
+  const queuedHint =
+    queuedCount > 0 ? (
+      <p className="mt-3 text-center text-xs text-stone-400">
+        {queuedCount} more ready when you are.
+      </p>
+    ) : null;
 
   // Sort tasks to match energy: foggy → easy first, sharp → hard first
   if (energy === 'low' || energy === 'high') {
@@ -36,6 +47,7 @@ export default async function TodayTaskList({ energy = 'medium' }) {
       <div className="mt-8 rounded-xl border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center">
         <p className="text-stone-400 text-sm">Nothing on your list for today.</p>
         <p className="mt-1 text-stone-400 text-sm">Add something above to get started.</p>
+        {queuedHint}
       </div>
     );
   }
@@ -55,6 +67,7 @@ export default async function TodayTaskList({ energy = 'medium' }) {
           />
         ))}
       </div>
+      {queuedHint}
     </section>
   );
 }

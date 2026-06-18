@@ -67,7 +67,10 @@ export const tasks = pgTable('tasks', {
   isToday: boolean('is_today').default(false),
   order: integer('order').default(0),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
   completedAt: timestamp('completed_at', { mode: 'date' }),
 });
 
