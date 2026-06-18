@@ -36,20 +36,33 @@ function fillBrownNoise(buffer, gain = 3.5) {
  * match the first). We generate a little extra tail and cosine-crossfade it
  * back over the head, so the seam is continuous and the loop is silent.
  *
+ * The random walk has no inherent amplitude ceiling, so after generating it we
+ * normalize down (never up) whenever its peak exceeds `peakLimit` — this bounds
+ * clipping deterministically regardless of buffer length or gain, instead of
+ * relying on a low-enough gain to make an excursion merely unlikely over a
+ * long, many-times-looped buffer.
+ *
  * @param {AudioBuffer} buffer
  * @param {number} channel
  * @param {number} [gain]
+ * @param {number} [peakLimit]
  */
-function fillBrownNoise2(buffer, channel, gain = 3.5) {
+function fillBrownNoise2(buffer, channel, gain = 3.5, peakLimit = 0.9) {
   const data = buffer.getChannelData(channel);
   const n = data.length;
   const fade = Math.min(Math.floor(buffer.sampleRate * 0.05), Math.floor(n / 4));
   const tmp = new Float32Array(n + fade);
   let last = 0;
+  let peak = 0;
   for (let i = 0; i < tmp.length; i++) {
     const white = Math.random() * 2 - 1;
     last = (last + 0.02 * white) / 1.02;
     tmp[i] = last * gain;
+    if (Math.abs(tmp[i]) > peak) peak = Math.abs(tmp[i]);
+  }
+  if (peak > peakLimit) {
+    const scale = peakLimit / peak;
+    for (let i = 0; i < tmp.length; i++) tmp[i] *= scale;
   }
   for (let i = 0; i < n; i++) data[i] = tmp[i];
   // Crossfade the head with the natural continuation past the end (tmp[n..]),
@@ -83,6 +96,36 @@ function makeReverbImpulse(ctx, seconds = 2.6, decay = 2.2) {
 }
 
 /**
+ * Builds the two looped noise buffers startSeaSound plays. Split out so it can
+ * run during idle time after mount (see the effect in MeditationScene) instead
+ * of synchronously inside the click handler that starts playback — generating
+ * ~3.6M samples via fillBrownNoise/fillBrownNoise2's per-sample loops is cheap
+ * in isolation but is the dominant cost when run on the user's click gesture.
+ *
+ * @param {AudioContext} ctx
+ * @returns {{ bedBuffer: AudioBuffer, waveBuffer: AudioBuffer }}
+ */
+function buildSeaBuffers(ctx) {
+  // The bed buffer is long and deliberately not a simple multiple of the wave
+  // buffer's length — a short loop occasionally contains a random energy peak
+  // that, once looped, recurs at an exactly periodic interval and reads as a
+  // "bump" even though the seam itself is click-free. A long, coprime-ish
+  // length pushes any such cross-buffer recurrence far enough apart (and keeps
+  // the two loops from ever restarting in sync) that it stops being
+  // perceptible as periodic. fillBrownNoise2 also bounds each buffer's own
+  // peak amplitude, so a recurring peak inside a single buffer is loud at
+  // worst, never a hard clip.
+  const bedBuffer = ctx.createBuffer(2, ctx.sampleRate * 23, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) fillBrownNoise2(bedBuffer, ch, 3.5);
+
+  // 29s, not a multiple of bedBuffer's 23s — see comment above.
+  const waveBuffer = ctx.createBuffer(1, ctx.sampleRate * 29, ctx.sampleRate);
+  fillBrownNoise(waveBuffer, 3.2);
+
+  return { bedBuffer, waveBuffer };
+}
+
+/**
  * Builds and starts a self-contained "calm sea" soundscape using the Web Audio
  * API — no audio file needed. Several layers, plus stereo width and a touch of
  * reverb, make it read as real surf rather than a steady drone:
@@ -102,9 +145,10 @@ function makeReverbImpulse(ctx, seconds = 2.6, decay = 2.2) {
  * it reads as continuous surf with no periodic "plink" punctuating the calm.
  *
  * @param {AudioContext} ctx
+ * @param {{ bedBuffer: AudioBuffer, waveBuffer: AudioBuffer }} buffers  from {@link buildSeaBuffers}
  * @returns {() => void} stop function that tears the graph down
  */
-function startSeaSound(ctx) {
+function startSeaSound(ctx, buffers) {
   let stopped = false;
   /** @type {Set<ReturnType<typeof setTimeout>>} */
   const timers = new Set();
@@ -162,14 +206,7 @@ function startSeaSound(ctx) {
 
   // --- Layer 1: the constant distant-ocean bed (stereo) --------------------
   // Two independent channels of brown noise so the floor is wide, not a point.
-  // Long and deliberately not a simple multiple of waveBuffer's length below —
-  // a short loop occasionally contains a random energy peak that, once looped,
-  // recurs at an exactly periodic interval and reads as a "bump" even though
-  // the seam itself is click-free. A long, coprime-ish length pushes any such
-  // recurrence far enough apart (and keeps the two loops from ever restarting
-  // in sync) that it stops being perceptible as periodic.
-  const bedBuffer = ctx.createBuffer(2, ctx.sampleRate * 23, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) fillBrownNoise2(bedBuffer, ch, 3.5);
+  const { bedBuffer, waveBuffer } = buffers;
   const bed = ctx.createBufferSource();
   bed.buffer = bedBuffer;
   bed.loop = true;
@@ -189,15 +226,10 @@ function startSeaSound(ctx) {
 
   // --- Wave + bubble source noise ------------------------------------------
   // One looped noise buffer feeds every wave; per-wave filters/gains shape each
-  // one so they never sound identical.
-  // 29s, not a multiple of bedBuffer's 23s — see comment on bedBuffer above.
-  const waveBuffer = ctx.createBuffer(1, ctx.sampleRate * 29, ctx.sampleRate);
-  // Gain kept low enough that the random-walk noise never approaches ±1 and
-  // clips (a previous gain of 6.5 let occasional excursions hard-clip, which
-  // is the actual source of the "crackle" — heard periodically because it's
-  // baked into this looped buffer). Loudness is made up downstream on
-  // waveBus instead, after the per-wave envelopes/filters have shaped it.
-  fillBrownNoise(waveBuffer, 3.2);
+  // one so they never sound identical. Source gain (3.2, set in
+  // buildSeaBuffers) is kept low and amplitude-normalized so it never clips;
+  // loudness is made up downstream on waveBus instead, after the per-wave
+  // envelopes/filters have shaped it.
   const waveSource = ctx.createBufferSource();
   waveSource.buffer = waveBuffer;
   waveSource.loop = true;
@@ -317,9 +349,24 @@ function startSeaSound(ctx) {
 const CAUSTICS_SCALE = 0.5;
 
 /**
+ * @typedef {{ period: number, dir: 1 | -1, radiusFactor: number, color: string }} CausticSheet
+ */
+
+/**
+ * Per-sheet config for the two overlaid caustic light layers. Each entry picks
+ * a distinct period/direction/radius/color so the sheets read as drifting
+ * apart rather than in lockstep.
+ * @type {Array<CausticSheet>}
+ */
+const CAUSTIC_SHEETS = [
+  { period: 18, dir: 1, radiusFactor: 0.5, color: '255,255,255' },
+  { period: 26, dir: -1, radiusFactor: 0.42, color: '173,255,247' },
+];
+
+/**
  * Paints one slow-drifting caustic light sheet using an additive radial
- * gradient. Two of these overlaid (different period/phase/color) read as
- * shifting underwater light, replacing what used to be two full-screen
+ * gradient. The two sheets in CAUSTIC_SHEETS overlaid read as shifting
+ * underwater light, replacing what used to be two full-screen
  * `mix-blend-soft-light` divs — that blend mode forces the browser to
  * re-composite the entire viewport every frame, which is the likely cause of
  * the animation reading smooth only while DevTools is open (it changes the
@@ -331,21 +378,18 @@ const CAUSTICS_SCALE = 0.5;
  * @param {number} width   canvas pixel width (already includes CAUSTICS_SCALE)
  * @param {number} height  canvas pixel height
  * @param {number} t       seconds elapsed
- * @param {0 | 1} index    picks period/phase/color so the two sheets differ
+ * @param {CausticSheet} sheet
  */
-function drawCausticSheet(ctx, width, height, t, index) {
-  const period = index === 0 ? 18 : 26;
-  const dir = index === 0 ? 1 : -1;
-  const angle = (dir * t * 2 * Math.PI) / period;
+function drawCausticSheet(ctx, width, height, t, sheet) {
+  const angle = (sheet.dir * t * 2 * Math.PI) / sheet.period;
   const cx = width * (0.5 + 0.24 * Math.cos(angle));
   const cy = height * (0.5 + 0.24 * Math.sin(angle * 0.8));
-  const radius = Math.max(width, height) * (index === 0 ? 0.5 : 0.42);
-  const color = index === 0 ? '255,255,255' : '173,255,247';
+  const radius = Math.max(width, height) * sheet.radiusFactor;
   const alpha = 0.22 + 0.1 * Math.sin(angle * 1.3);
 
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  grad.addColorStop(0, `rgba(${color},${alpha})`);
-  grad.addColorStop(1, `rgba(${color},0)`);
+  grad.addColorStop(0, `rgba(${sheet.color},${alpha})`);
+  grad.addColorStop(1, `rgba(${sheet.color},0)`);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 }
@@ -363,6 +407,9 @@ export default function MeditationScene() {
 
   const audioCtxRef = useRef(/** @type {AudioContext|null} */ (null));
   const stopSoundRef = useRef(/** @type {(() => void)|null} */ (null));
+  const seaBuffersRef = useRef(
+    /** @type {{ bedBuffer: AudioBuffer, waveBuffer: AudioBuffer }|null} */ (null)
+  );
   const causticsCanvasRef = useRef(/** @type {HTMLCanvasElement|null} */ (null));
 
   const phase = BREATH_PHASES[phaseIndex];
@@ -378,40 +425,68 @@ export default function MeditationScene() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return undefined;
 
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let width = 0;
-    let height = 0;
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let reduceMotion = motionQuery.matches;
+    /** @type {number | null} */
+    let raf = null;
 
+    function paint(t) {
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'lighter';
+      for (const sheet of CAUSTIC_SHEETS) drawCausticSheet(ctx, width, height, t, sheet);
+    }
+
+    function startLoop() {
+      const start = performance.now();
+      raf = requestAnimationFrame(function tick(now) {
+        paint((now - start) / 1000);
+        raf = requestAnimationFrame(tick);
+      });
+    }
+
+    function stopLoop() {
+      if (raf !== null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+    }
+
+    // Resizing reallocates (and so clears) the canvas's pixel buffer, so a
+    // reduced-motion repaint has to be re-triggered here explicitly — the rAF
+    // loop that would otherwise cover it is intentionally not running.
     function resize() {
-      width = Math.round(canvas.clientWidth * CAUSTICS_SCALE);
-      height = Math.round(canvas.clientHeight * CAUSTICS_SCALE);
-      canvas.width = width;
-      canvas.height = height;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(canvas.clientWidth * CAUSTICS_SCALE * dpr);
+      canvas.height = Math.round(canvas.clientHeight * CAUSTICS_SCALE * dpr);
+      if (reduceMotion) paint(0);
     }
     resize();
     window.addEventListener('resize', resize);
 
-    function paint(t) {
-      ctx.clearRect(0, 0, width, height);
-      ctx.globalCompositeOperation = 'lighter';
-      drawCausticSheet(ctx, width, height, t, 0);
-      drawCausticSheet(ctx, width, height, t, 1);
+    // Live-reacts to the OS/browser setting changing while this scene stays
+    // mounted, matching how the CSS media query it replaced used to behave.
+    function handleMotionChange(e) {
+      reduceMotion = e.matches;
+      if (reduceMotion) {
+        stopLoop();
+        paint(0);
+      } else {
+        startLoop();
+      }
     }
+    motionQuery.addEventListener('change', handleMotionChange);
 
     if (reduceMotion) {
       paint(0);
-      return () => window.removeEventListener('resize', resize);
+    } else {
+      startLoop();
     }
 
-    const start = performance.now();
-    let raf = requestAnimationFrame(function tick(now) {
-      paint((now - start) / 1000);
-      raf = requestAnimationFrame(tick);
-    });
-
     return () => {
-      cancelAnimationFrame(raf);
+      stopLoop();
       window.removeEventListener('resize', resize);
+      motionQuery.removeEventListener('change', handleMotionChange);
     };
   }, []);
 
@@ -438,6 +513,27 @@ export default function MeditationScene() {
     };
   }, []);
 
+  // Pre-build the noise buffers startSeaSound needs during idle time after
+  // mount, rather than synchronously inside toggleSound's click handler — the
+  // sample-generation loops are the dominant cost of starting playback, and
+  // a user clicking "Turn on sea sounds" expects audio to start immediately.
+  // Constructing the AudioContext here (without resuming it) doesn't violate
+  // the autoplay policy; only starting playback requires the user gesture.
+  useEffect(() => {
+    const Ctx = window.AudioContext || /** @type {any} */ (window).webkitAudioContext;
+    if (!Ctx) return undefined;
+    const ctx = new Ctx();
+    audioCtxRef.current = ctx;
+
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+    const cancelIdle = window.cancelIdleCallback || clearTimeout;
+    const id = idle(() => {
+      seaBuffersRef.current = buildSeaBuffers(ctx);
+    });
+
+    return () => cancelIdle(id);
+  }, []);
+
   // Sound must start from a user gesture (browser autoplay policy).
   async function toggleSound() {
     if (soundOn) {
@@ -453,7 +549,8 @@ export default function MeditationScene() {
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') await ctx.resume();
-      stopSoundRef.current = startSeaSound(ctx);
+      const buffers = seaBuffersRef.current ?? buildSeaBuffers(ctx);
+      stopSoundRef.current = startSeaSound(ctx, buffers);
       setSoundOn(true);
     } catch (err) {
       console.error('[meditation] audio failed:', err);
@@ -679,9 +776,10 @@ export default function MeditationScene() {
           type="button"
           onClick={toggleSound}
           aria-pressed={soundOn}
+          aria-label={soundOn ? 'Turn off sea sounds' : 'Turn on sea sounds'}
           className="rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/25 transition-colors"
         >
-          {soundOn ? '🔊 Sea sounds on' : '🔇 Turn on sea sounds'}
+          <span aria-hidden="true">{soundOn ? '🔊' : '🔇'}</span> {soundOn ? 'Sea sounds on' : 'Turn on sea sounds'}
         </button>
       </div>
     </div>

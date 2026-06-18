@@ -63,6 +63,7 @@ export default function EnergyPicker() {
             key={opt.value}
             type="button"
             onClick={() => pick(opt.value)}
+            aria-label={`${opt.label}: ${opt.description}`}
             className="flex items-center gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-left hover:border-stone-400 hover:bg-white transition-colors"
           >
             <span className="text-sm font-medium text-stone-900">{opt.label}</span>

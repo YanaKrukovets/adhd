@@ -104,6 +104,7 @@ export default function TaskCard({ id, title, firstAction, estimateMinutes, ener
             type="button"
             onClick={deferTask}
             disabled={deferring || starting || completing}
+            aria-label={deferring ? `Moving ${title} to another day` : `Defer ${title} to another day`}
             className="text-xs text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-40"
           >
             {deferring ? 'Moving…' : 'not today'}

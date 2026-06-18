@@ -35,6 +35,7 @@ export default function RefillButton({ queuedCount }) {
         type="button"
         onClick={pullNext}
         disabled={pulling}
+        aria-label={pulling ? 'Bringing the next task into today\'s list' : 'Pull the next task into today\'s list'}
         className="text-xs text-stone-500 hover:text-stone-700 transition-colors disabled:opacity-40"
       >
         {pulling ? 'Bringing it over…' : 'Pull the next one over'}
