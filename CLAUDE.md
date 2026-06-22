@@ -17,7 +17,7 @@ Agentic executive-function assistant for adults. JavaScript (NOT TypeScript), Ne
 4. Daily plan shows MAXIMUM 3 tasks. Hard cap, enforced in schema (`suggested_today.max(3)`).
 5. First actions must be concrete and ≤5 minutes. The planner eval enforces this; don't weaken the rubric.
 6. No countdown timers in UI. Elapsed-time indicators only.
-7. Prompts live in `src/lib/prompts/*.md` and are loaded at runtime. NEVER inline a system prompt in code. Every prompt edit requires: bump version constant, add CHANGELOG.md entry, run the matching eval suite, paste before/after scores in the changelog entry.
+7. Prompts live in `src/lib/prompts/*.md` and are loaded at runtime. NEVER inline a system prompt in code. All prompt edits go through the `prompt-change` skill.
 8. Every LLM call goes through `src/lib/telemetry.js` wrapper (logs model, tokens, cost, latency, prompt_version to agent_calls).
 9. All agents (session, planner, eval judges) run on Google Gemini (`gemini-2.5-flash`) via the free tier. Don't change model routing without updating cost projections in README. Switch the provider in one place per agent (`@ai-sdk/google`).
 10. Copy/tone: never use shame language ("overdue", "you failed to", "missed", streak-breaking). Voice is a calm friend, not a coach.
@@ -25,10 +25,6 @@ Agentic executive-function assistant for adults. JavaScript (NOT TypeScript), Ne
 ## Feature gate
 Before implementing any new feature, answer: **Does this increase the probability a user starts a task within the next 5 minutes?**
 If no, it doesn't ship. Projects, tags, kanban boards, recurring tasks, priorities, and nested subtasks all fail this test. The product is initiation, not task management.
-
-## Telemetry notes
-- `agentCalls.agentType` (`planner | session | eval_judge`) is already a cost bucket — do NOT add a redundant `cost_bucket` column. Derive per-session/per-task cost metrics as joins in queries, not as schema.
-- Check-in telemetry lives in `sessionEvents.metadata` (jsonb). For `eventType: 'checkin'` rows, store `{ sent_at, response_delay_seconds, abandoned }`. This is the data needed to tune interruption cadence per user.
 
 ## Conventions
 - Commit format: `feat|fix|chore|test|eval(scope): description`

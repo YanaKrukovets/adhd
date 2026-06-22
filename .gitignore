@@ -27,3 +27,4 @@ drizzle/*.sql
 
 # eval results (generated, not committed)
 scripts/evals/results/
+.vercel

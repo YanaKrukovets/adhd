@@ -2,7 +2,12 @@
 import { NextResponse } from 'next/server';
 import { convertToModelMessages } from 'ai';
 import { auth } from '@/lib/auth.js';
-import { getWorkSession, getTaskById, appendSessionEvent } from '@/lib/db/queries.js';
+import {
+  getWorkSession,
+  getTaskById,
+  appendSessionEvent,
+  getSessionMessages,
+} from '@/lib/db/queries.js';
 import { runSessionAgent } from '@/lib/agents/session.js';
 import { friendlyStreamError } from '@/lib/session-error.js';
 import { randomUUID } from 'crypto';
@@ -23,6 +28,35 @@ function getMessageText(message) {
     .filter((p) => p.type === 'text')
     .map((p) => p.text)
     .join('');
+}
+
+/**
+ * GET /api/session/[id]
+ * Returns the data needed to (re)hydrate a session in a native client: the work
+ * session, its bound task, and the persisted chat transcript. This mirrors what
+ * the web app's session page assembles server-side for `useChat` initial state.
+ *
+ * @param {Request} _request
+ * @param {{ params: Promise<{ id: string }> }} context
+ */
+export async function GET(_request, { params }) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = session.user.id;
+
+  const { id: sessionId } = await params;
+
+  const workSession = await getWorkSession(sessionId, userId);
+  if (!workSession) {
+    return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+  }
+
+  const task = workSession.taskId ? await getTaskById(workSession.taskId) : null;
+  const messages = await getSessionMessages(sessionId);
+
+  return NextResponse.json({ session: workSession, task, messages });
 }
 
 /**
